@@ -9,16 +9,16 @@ interface WaveformPanelProps {
   channelNames?: string[];
 }
 
-// 备注：通道颜色（模仿 Serial-Studio 的配色方案）
+// 备注：通道配色方案（高对比度，适合深色背景）
 const CHANNEL_COLORS = [
-  "#FF6384", // 红
-  "#36A2EB", // 蓝
-  "#FFCE56", // 黄
-  "#4BC0C0", // 青
-  "#9966FF", // 紫
-  "#FF9F40", // 橙
-  "#C9CBCF", // 灰
-  "#7BC8A4", // 绿
+  "#FF5252", // 红
+  "#448AFF", // 蓝
+  "#69F0AE", // 绿
+  "#FFD740", // 黄
+  "#E040FB", // 紫
+  "#40C4FF", // 天蓝
+  "#FF6E40", // 橙
+  "#B2FF59", // 黄绿
 ];
 
 export function WaveformPanel({ data, maxPoints = 500 }: WaveformPanelProps) {
