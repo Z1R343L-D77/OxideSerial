@@ -1,5 +1,5 @@
 {
-  "name": "serial-debugger",
+  "name": "oxide-serial",
   "private": true,
   "version": "0.0.0",
   "type": "module",
