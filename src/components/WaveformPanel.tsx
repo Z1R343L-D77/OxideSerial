@@ -396,11 +396,6 @@ export function WaveformPanel({ frame }: WaveformPanelProps) {
     resetToLatest();
   };
 
-  const handleBrowse = () => {
-    viewModeRef.current = "browse";
-    setViewMode("browse");
-  };
-
   const handleClear = () => {
     bufferRef.current = {
       timestamps: [],
