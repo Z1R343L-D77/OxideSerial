@@ -1,193 +1,566 @@
-import { useEffect, useRef, useCallback, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type MouseEvent as ReactMouseEvent,
+  type WheelEvent as ReactWheelEvent,
+} from "react";
+import { save } from "@tauri-apps/plugin-dialog";
 import uPlot from "uplot";
 import "uplot/dist/uPlot.min.css";
 
-// 备注：波形面板属性
-interface WaveformPanelProps {
-  data: { timestamp: number; values: number[] }[];
-  maxPoints?: number;
-  channelNames?: string[];
+interface DataFrame {
+  timestamp: number;
+  values: number[];
+  raw: string;
 }
 
-// 备注：通道配色方案（高对比度，适合深色背景）
+interface WaveformPanelProps {
+  frame: DataFrame | null;
+}
+
+interface CursorInfo {
+  visible: boolean;
+  time: number;
+  values: Array<number | null>;
+}
+
+interface SampleInfo {
+  time: number | null;
+  values: Array<number | null>;
+}
+
+interface PanState {
+  startX: number;
+  startY: number;
+  xMin: number;
+  xMax: number;
+  yMin: number;
+  yMax: number;
+}
+
 const CHANNEL_COLORS = [
-  "#FF5252", // 红
-  "#448AFF", // 蓝
-  "#69F0AE", // 绿
-  "#FFD740", // 黄
-  "#E040FB", // 紫
-  "#40C4FF", // 天蓝
-  "#FF6E40", // 橙
-  "#B2FF59", // 黄绿
+  "#FF5252",
+  "#448AFF",
+  "#69F0AE",
+  "#FFD740",
+  "#E040FB",
+  "#40C4FF",
+  "#FF6E40",
+  "#B2FF59",
 ];
 
-export function WaveformPanel({ data, maxPoints = 500 }: WaveformPanelProps) {
+function fmtTime(v: number | null): string {
+  if (v == null || Number.isNaN(v)) return "--:--.---";
+  const totalSec = Math.max(0, Math.floor(v));
+  const ms = Math.floor((v - totalSec) * 1000);
+  const m = Math.floor(totalSec / 60);
+  const s = totalSec % 60;
+  return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}.${String(ms).padStart(3, "0")}`;
+}
+
+function fmtValue(v: number | null): string {
+  return v == null || Number.isNaN(v) ? "--" : v.toFixed(3);
+}
+
+function clampIndex(index: number, length: number): number {
+  if (length <= 0) return 0;
+  return Math.min(Math.max(index, 0), length - 1);
+}
+
+type ViewMode = "auto" | "browse";
+
+export function WaveformPanel({ frame }: WaveformPanelProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<uPlot | null>(null);
-  const [paused, setPaused] = useState(false);
+
   const [channelCount, setChannelCount] = useState(0);
-  const dataRef = useRef<{ timestamps: number[]; channels: number[][] }>({
+  const [paused, setPaused] = useState(false);
+  const [viewMode, setViewMode] = useState<ViewMode>("auto");
+  const [cursorInfo, setCursorInfo] = useState<CursorInfo>({
+    visible: false,
+    time: 0,
+    values: [],
+  });
+  const [clearedUntilTimestamp, setClearedUntilTimestamp] = useState<number>(Number.POSITIVE_INFINITY);
+
+  // 备注：可调波形参数
+  const [deltaT, setDeltaT] = useState(50);          // △t 采样间隔 ms
+  const [bufferLimit, setBufferLimit] = useState(50000); // 缓冲区上限 /ch
+  const [autoPoints, setAutoPoints] = useState(100);   // Auto 点数对齐
+
+  const pausedRef = useRef(false);
+  const panningRef = useRef(false);
+  const viewModeRef = useRef<ViewMode>("auto");
+  const panStateRef = useRef<PanState | null>(null);
+
+  const bufferRef = useRef<{ timestamps: number[]; channels: number[][] }>({
     timestamps: [],
     channels: [],
   });
 
-  // 备注：初始化图表
-  const initChart = useCallback(
-    (numChannels: number) => {
-      if (!containerRef.current) return;
+  const latestSample: SampleInfo =
+    frame && frame.timestamp > clearedUntilTimestamp
+      ? {
+          time: frame.timestamp,
+          values: frame.values.map((value) => value ?? null),
+        }
+      : {
+          time: null,
+          values: [],
+        };
 
-      // 备注：清理旧图表
-      if (chartRef.current) {
-        chartRef.current.destroy();
-        chartRef.current = null;
-      }
+  const buildAlignedData = useCallback((): uPlot.AlignedData => {
+    const { timestamps, channels } = bufferRef.current;
+    return [
+      new Float64Array(timestamps),
+      ...channels.map((channel) => new Float64Array(channel)),
+    ];
+  }, []);
 
-      const series: uPlot.Series[] = [
-        {
-          label: "时间(s)",
-          value: (_u, v) => (v != null ? v.toFixed(2) : "-"),
-        },
-      ];
+  const renderChart = useCallback((resetScales: boolean) => {
+    const chart = chartRef.current;
+    if (!chart || bufferRef.current.channels.length === 0) return;
 
-      for (let i = 0; i < numChannels; i++) {
-        series.push({
-          label: `CH${i + 1}`,
-          stroke: CHANNEL_COLORS[i % CHANNEL_COLORS.length],
-          width: 2,
-          value: (_u, v) => (v != null ? v.toFixed(3) : "-"),
-        });
-      }
+    chart.setData(buildAlignedData(), resetScales);
+  }, [buildAlignedData]);
 
-      const opts: uPlot.Options = {
-        width: containerRef.current.clientWidth,
-        height: containerRef.current.clientHeight || 300,
+  const resetToLatest = useCallback(() => {
+    viewModeRef.current = "auto";
+    setViewMode("auto");
+    renderChart(true);
+  }, [renderChart]);
+
+  const exportCsv = useCallback(async () => {
+    const { timestamps, channels } = bufferRef.current;
+    if (timestamps.length === 0) return;
+
+    const headers = ["timestamp", ...channels.map((_, index) => `CH${index + 1}`)];
+    const rows = timestamps.map((timestamp, rowIndex) => {
+      const values = channels.map((channel) => channel[rowIndex] ?? "");
+      return [timestamp.toFixed(6), ...values].join(",");
+    });
+
+    const csv = [headers.join(","), ...rows].join("\n");
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+    const filePath = await save({
+      defaultPath: `waveform-${stamp}.csv`,
+      filters: [{ name: "CSV", extensions: ["csv"] }],
+    });
+
+    if (!filePath) return;
+
+    const { writeTextFile } = await import("@tauri-apps/plugin-fs");
+    await writeTextFile(filePath, csv);
+  }, []);
+
+  const initChart = useCallback((numChannels: number) => {
+    const el = containerRef.current;
+    if (!el) return;
+
+    chartRef.current?.destroy();
+    chartRef.current = null;
+
+    const width = el.clientWidth;
+    const height = el.clientHeight || 360;
+    if (width === 0 || height === 0) return;
+
+    const style = getComputedStyle(document.documentElement);
+    const gridColor = style.getPropertyValue("--border").trim() || "#30363d";
+    const textColor = style.getPropertyValue("--text-muted").trim() || "#6e7681";
+
+    const series: uPlot.Series[] = [
+      {
+        label: "时间",
+        value: (_u, v) => fmtTime(v),
+      },
+    ];
+
+    for (let index = 0; index < numChannels; index++) {
+      series.push({
+        label: `CH${index + 1}`,
+        stroke: CHANNEL_COLORS[index % CHANNEL_COLORS.length],
+        width: 1.5,
+        points: { show: false },
+        value: (_u, v) => fmtValue(v),
+      });
+    }
+
+    chartRef.current = new uPlot(
+      {
+        width,
+        height,
         series,
         axes: [
           {
-            stroke: "#666",
-            grid: { stroke: "#2a2a3e" },
+            stroke: textColor,
+            grid: { stroke: gridColor, width: 1 },
+            values: (_u, vals) => vals.map((value) => fmtTime(value)),
+            size: 54,
+            gap: 6,
           },
           {
-            stroke: "#666",
-            grid: { stroke: "#2a2a3e" },
+            stroke: textColor,
+            grid: { stroke: gridColor, width: 1 },
+            size: 52,
           },
         ],
         cursor: {
-          drag: { x: true, y: false },
+          drag: { x: false, y: false, setScale: false },
+          points: { show: false },
         },
         scales: {
-          x: { time: false },
+          x: { time: false, auto: true },
+          y: { auto: true },
         },
-      };
+        hooks: {
+          setCursor: [
+            (plot) => {
+              const { left, top } = plot.cursor;
+              if (left == null || top == null || left < 0 || top < 0) {
+                setCursorInfo((prev) => (prev.visible ? { ...prev, visible: false } : prev));
+                return;
+              }
 
-      const initialData: uPlot.AlignedData = [
-        new Float64Array(0),
-        ...Array.from({ length: numChannels }, () => new Float64Array(0)),
-      ];
+              const { timestamps, channels } = bufferRef.current;
+              if (timestamps.length === 0) return;
 
-      chartRef.current = new uPlot(opts, initialData, containerRef.current);
-      setChannelCount(numChannels);
+              const dataIndex = clampIndex(Math.round(plot.posToIdx(left)), timestamps.length);
+              setCursorInfo({
+                visible: true,
+                time: timestamps[dataIndex],
+                values: channels.map((channel) => channel[dataIndex] ?? null),
+              });
+            },
+          ],
+          setScale: [
+            (plot, key) => {
+              const scale = plot.scales[key];
+              if (scale.min == null || scale.max == null) return;
+            },
+          ],
+        },
+      },
+      [new Float64Array(0), ...Array.from({ length: numChannels }, () => new Float64Array(0))],
+      el,
+    );
 
-      dataRef.current = { timestamps: [], channels: Array.from({ length: numChannels }, () => []) };
-    },
-    [],
-  );
+    setChannelCount(numChannels);
 
-  // 备注：更新图表数据
+    if (bufferRef.current.timestamps.length > 0) {
+      renderChart(true);
+    }
+  }, [renderChart]);
+
   useEffect(() => {
-    if (paused) return;
-    if (data.length === 0) return;
+    if (!frame) return;
 
-    const latest = data[data.length - 1];
-    const numChannels = latest.values.length;
+    const numChannels = frame.values.length;
+    if (numChannels === 0) return;
 
-    // 备注：首次检测到数据时初始化图表
-    if (channelCount === 0 && numChannels > 0) {
+    if (bufferRef.current.channels.length === 0) {
+      bufferRef.current.channels = Array.from({ length: numChannels }, () => []);
+      setChannelCount(numChannels);
+    } else if (bufferRef.current.channels.length !== numChannels) {
+      bufferRef.current = {
+        timestamps: [],
+        channels: Array.from({ length: numChannels }, () => []),
+      };
+      setCursorInfo({ visible: false, time: 0, values: [] });
       initChart(numChannels);
     }
 
-    if (!chartRef.current || channelCount === 0) return;
-
-    // 备注：追加新数据
-    const d = dataRef.current;
-    d.timestamps.push(latest.timestamp);
-    for (let i = 0; i < channelCount; i++) {
-      d.channels[i].push(latest.values[i] ?? 0);
+    if (!chartRef.current) {
+      initChart(numChannels);
     }
 
-    // 备注：限制数据点数量
-    while (d.timestamps.length > maxPoints) {
-      d.timestamps.shift();
-      for (let i = 0; i < channelCount; i++) {
-        d.channels[i].shift();
+    const { timestamps, channels } = bufferRef.current;
+    timestamps.push(frame.timestamp);
+    for (let index = 0; index < channels.length; index++) {
+      channels[index].push(frame.values[index] ?? 0);
+    }
+
+    while (timestamps.length > bufferLimit) {
+      timestamps.shift();
+      for (const channel of channels) {
+        channel.shift();
       }
     }
 
-    // 备注：更新图表
-    const aligned: uPlot.AlignedData = [
-      new Float64Array(d.timestamps),
-      ...d.channels.map((ch) => new Float64Array(ch)),
-    ];
+    if (!pausedRef.current && !panningRef.current && viewModeRef.current === "auto") {
+      renderChart(true);
+    }
+  }, [frame, bufferLimit, initChart, renderChart]);
 
-    chartRef.current.setData(aligned, true);
-  }, [data, paused, channelCount, maxPoints, initChart]);
-
-  // 备注：窗口大小变化时重绘
   useEffect(() => {
-    const handleResize = () => {
-      if (chartRef.current && containerRef.current) {
-        chartRef.current.setSize({
-          width: containerRef.current.clientWidth,
-          height: containerRef.current.clientHeight || 300,
+    const el = containerRef.current;
+    if (!el) return;
+
+    const resizeChart = () => {
+      const rect = el.getBoundingClientRect();
+      const width = Math.floor(rect.width);
+      const height = Math.floor(rect.height);
+      if (chartRef.current && width > 0 && height > 0) {
+        chartRef.current.setSize({ width, height });
+      } else if (!chartRef.current && width > 0 && height > 0 && bufferRef.current.channels.length > 0) {
+        initChart(bufferRef.current.channels.length);
+      }
+    };
+
+    const observer = new ResizeObserver(() => resizeChart());
+    observer.observe(el);
+    window.addEventListener("resize", resizeChart);
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", resizeChart);
+    };
+  }, [initChart]);
+
+  useEffect(() => {
+    const handleMouseMove = (event: MouseEvent) => {
+      if (!panningRef.current) return;
+
+      const chart = chartRef.current;
+      const el = containerRef.current;
+      const panState = panStateRef.current;
+      if (!chart || !el || !panState) return;
+
+      const xRange = panState.xMax - panState.xMin;
+      const yRange = panState.yMax - panState.yMin;
+      if (xRange <= 0 || yRange <= 0) return;
+
+      const dx = event.clientX - panState.startX;
+      const dy = event.clientY - panState.startY;
+      const dataDx = -(dx / el.clientWidth) * xRange;
+      const dataDy = (dy / el.clientHeight) * yRange;
+
+      chart.batch(() => {
+        chart.setScale("x", {
+          min: panState.xMin + dataDx,
+          max: panState.xMax + dataDx,
+        });
+        chart.setScale("y", {
+          min: panState.yMin + dataDy,
+          max: panState.yMax + dataDy,
+        });
+      });
+    };
+
+    const handleMouseUp = () => {
+      if (!panningRef.current) return;
+
+      panningRef.current = false;
+      panStateRef.current = null;
+
+      const el = containerRef.current;
+      if (el) {
+        el.style.cursor = "";
+      }
+
+      if (!pausedRef.current && viewModeRef.current === "auto") {
+        renderChart(true);
+      }
+    };
+
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseup", handleMouseUp);
+
+    return () => {
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, [renderChart]);
+
+  useEffect(() => {
+    return () => {
+      chartRef.current?.destroy();
+      chartRef.current = null;
+    };
+  }, []);
+
+  const handleTogglePause = () => {
+    const next = !pausedRef.current;
+    pausedRef.current = next;
+    setPaused(next);
+
+    if (!next) {
+      resetToLatest();
+    }
+  };
+
+  const handleAuto = () => {
+    pausedRef.current = false;
+    setPaused(false);
+    resetToLatest();
+  };
+
+  const handleBrowse = () => {
+    viewModeRef.current = "browse";
+    setViewMode("browse");
+  };
+
+  const handleClear = () => {
+    bufferRef.current = {
+      timestamps: [],
+      channels: Array.from({ length: channelCount }, () => []),
+    };
+    setCursorInfo({ visible: false, time: 0, values: [] });
+    setClearedUntilTimestamp(frame?.timestamp ?? Number.POSITIVE_INFINITY);
+    chartRef.current?.setData(
+      [new Float64Array(0), ...Array.from({ length: channelCount }, () => new Float64Array(0))],
+      true,
+    );
+  };
+
+  const handleWheel = useCallback((event: ReactWheelEvent<HTMLDivElement>) => {
+    const chart = chartRef.current;
+    const el = containerRef.current;
+    if (!chart || !el || bufferRef.current.timestamps.length === 0) return;
+
+    event.preventDefault();
+    if (viewModeRef.current !== "browse") {
+      viewModeRef.current = "browse";
+      setViewMode("browse");
+    }
+
+    const isVerticalOnly = event.shiftKey;
+    const rect = el.getBoundingClientRect();
+    const mouseX = event.clientX - rect.left;
+    const mouseY = event.clientY - rect.top;
+    const zoomIn = event.deltaY < 0;
+    const factor = zoomIn ? 0.82 : 1.22;
+
+    const batchUpdate = () => {
+      if (!isVerticalOnly) {
+        const xScale = chart.scales.x;
+        const xMin = xScale.min ?? 0;
+        const xMax = xScale.max ?? 1;
+        const xRange = xMax - xMin;
+        if (xRange > 0) {
+          const xCenter = chart.posToVal(mouseX, "x");
+          const xRatio = (xCenter - xMin) / xRange;
+          const nextRange = xRange * factor;
+          chart.setScale("x", {
+            min: xCenter - nextRange * xRatio,
+            max: xCenter + nextRange * (1 - xRatio),
+          });
+        }
+      }
+
+      const yScale = chart.scales.y;
+      const yMin = yScale.min ?? 0;
+      const yMax = yScale.max ?? 1;
+      const yRange = yMax - yMin;
+      if (yRange > 0) {
+        const yCenter = chart.posToVal(mouseY, "y");
+        const yRatio = (yCenter - yMin) / yRange;
+        const nextRange = yRange * factor;
+        chart.setScale("y", {
+          min: yCenter - nextRange * yRatio,
+          max: yCenter + nextRange * (1 - yRatio),
         });
       }
     };
 
-    window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize);
+    chart.batch(batchUpdate);
   }, []);
 
-  // 备注：组件卸载时销毁图表
-  useEffect(() => {
-    return () => {
-      if (chartRef.current) {
-        chartRef.current.destroy();
-        chartRef.current = null;
-      }
-    };
-  }, []);
+  const handleMouseDown = useCallback((event: ReactMouseEvent<HTMLDivElement>) => {
+    if (event.button !== 0) return;
 
-  const handleClear = () => {
-    dataRef.current = { timestamps: [], channels: Array.from({ length: channelCount }, () => []) };
-    if (chartRef.current) {
-      chartRef.current.setData(
-        [
-          new Float64Array(0),
-          ...Array.from({ length: channelCount }, () => new Float64Array(0)),
-        ],
-        true,
-      );
+    const chart = chartRef.current;
+    const el = containerRef.current;
+    if (!chart || !el) return;
+
+    const xScale = chart.scales.x;
+    const yScale = chart.scales.y;
+    const xMin = xScale.min;
+    const xMax = xScale.max;
+    const yMin = yScale.min;
+    const yMax = yScale.max;
+
+    if (xMin == null || xMax == null || yMin == null || yMax == null) return;
+
+    if (viewModeRef.current !== "browse") {
+      viewModeRef.current = "browse";
+      setViewMode("browse");
     }
-  };
+    panningRef.current = true;
+    panStateRef.current = {
+      startX: event.clientX,
+      startY: event.clientY,
+      xMin,
+      xMax,
+      yMin,
+      yMax,
+    };
+    el.style.cursor = "grabbing";
+  }, []);
+
+  const cursorText = cursorInfo.visible
+    ? `T ${fmtTime(cursorInfo.time)} | ${cursorInfo.values.map((value, index) => `CH${index + 1} ${fmtValue(value)}`).join("  ")}`
+    : latestSample.time != null
+      ? `Latest ${fmtTime(latestSample.time)} | ${latestSample.values.map((value, index) => `CH${index + 1} ${fmtValue(value)}`).join("  ")}`
+      : "等待数据...";
 
   return (
     <div className="waveform-panel">
       <div className="waveform-toolbar">
-        <span className="waveform-title">波形显示</span>
+        <span className="waveform-title">波形</span>
         <span className="waveform-channels">
-          {channelCount > 0 ? `${channelCount} 通道` : "等待数据..."}
+          {channelCount > 0 ? `${channelCount} CH | ${cursorText}` : "等待数据..."}
         </span>
-        <button
-          className={`btn-small ${paused ? "btn-resume" : "btn-pause"}`}
-          onClick={() => setPaused(!paused)}
-        >
-          {paused ? "▶ 恢复" : "⏸ 暂停"}
+        <button className={`btn-small ${paused ? "btn-resume" : "btn-pause"}`} onClick={handleTogglePause}>
+          {paused ? "▶ 继续" : "⏸ 暂停"}
         </button>
-        <button className="btn-small btn-clear" onClick={handleClear}>
-          清空
-        </button>
+        <button className={`btn-small ${viewMode === "auto" ? "btn-active" : ""}`} onClick={handleAuto}>Auto</button>
+        <button className="btn-small" onClick={() => void exportCsv()}>CSV</button>
+        <button className="btn-small btn-clear" onClick={handleClear}>✕</button>
       </div>
-      <div className="waveform-container" ref={containerRef} />
+      <div
+        className="waveform-container"
+        ref={containerRef}
+        onMouseDown={handleMouseDown}
+        onWheel={handleWheel}
+      />
+      {/* 备注：状态栏 - 可调参数 */}
+      <div className="waveform-statusbar">
+        <label className="statusbar-item">
+          △t:
+          <input
+            type="number"
+            min={1}
+            value={deltaT}
+            onChange={(e) => setDeltaT(Math.max(1, Number(e.target.value)))}
+            className="statusbar-input"
+          />
+          ms
+        </label>
+        <label className="statusbar-item">
+          缓冲区上限:
+          <input
+            type="number"
+            min={1000}
+            step={1000}
+            value={bufferLimit}
+            onChange={(e) => setBufferLimit(Math.max(1000, Number(e.target.value)))}
+            className="statusbar-input"
+          />
+          /ch
+        </label>
+        <label className="statusbar-item">
+          Auto点数对齐:
+          <input
+            type="number"
+            min={10}
+            value={autoPoints}
+            onChange={(e) => setAutoPoints(Math.max(10, Number(e.target.value)))}
+            className="statusbar-input"
+          />
+        </label>
+      </div>
     </div>
   );
 }

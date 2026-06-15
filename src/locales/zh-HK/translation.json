@@ -1,0 +1,79 @@
+{
+  "app": {
+    "name": "OxideSerial",
+    "version": "版本"
+  },
+  "settings": {
+    "title": "設定",
+    "theme": {
+      "title": "主題",
+      "light": "淺色",
+      "dark": "深色",
+      "system": "跟隨系統"
+    },
+    "language": {
+      "title": "語言",
+      "zh-CN": "简体中文",
+      "en-US": "English",
+      "zh-HK": "繁體中文"
+    },
+    "view": {
+      "title": "預設檢視",
+      "terminal": "終端",
+      "waveform": "波形",
+      "split": "分屏"
+    },
+    "general": {
+      "closeToTray": "關閉到系統匣",
+      "autostart": "開機自啟"
+    },
+    "about": {
+      "title": "關於",
+      "description": "工業級串口調試器",
+      "techStack": "基於 Tauri + Rust + React 構建"
+    }
+  },
+  "serial": {
+    "title": "串口設定",
+    "port": "串口",
+    "baudRate": "鮑率",
+    "dataBits": "資料位元",
+    "stopBits": "停止位元",
+    "parity": "同位",
+    "parityNone": "無",
+    "parityOdd": "奇",
+    "parityEven": "偶",
+    "connect": "開啟串口",
+    "disconnect": "斷開",
+    "noPorts": "無可用串口",
+    "refresh": "重新整理"
+  },
+  "terminal": {
+    "title": "終端",
+    "clear": "清除",
+    "send": "傳送",
+    "autoSend": "自動",
+    "placeholder": "輸入文字",
+    "hexPlaceholder": "01 03 00 00 00 01"
+  },
+  "waveform": {
+    "title": "波形顯示",
+    "channels": "通道",
+    "waiting": "等待資料...",
+    "pause": "暫停",
+    "resume": "恢復",
+    "clear": "清除"
+  },
+  "modbus": {
+    "title": "Modbus RTU",
+    "slaveId": "從站 ID",
+    "functionCode": "功能碼",
+    "startAddr": "起始位址",
+    "count": "數量",
+    "send": "傳送 Modbus"
+  },
+  "status": {
+    "connected": "已連線",
+    "disconnected": "未連線"
+  }
+}

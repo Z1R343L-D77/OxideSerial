@@ -394,6 +394,8 @@ fn parse_modbus_rtu(data: Vec<u8>) -> Result<ModbusResponse, String> {
 pub fn run() {
     tauri::Builder::default()
         .manage(AppState::new())
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_log::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
             list_ports,

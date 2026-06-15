@@ -1,0 +1,79 @@
+{
+  "app": {
+    "name": "OxideSerial",
+    "version": "Version"
+  },
+  "settings": {
+    "title": "Settings",
+    "theme": {
+      "title": "Theme",
+      "light": "Light",
+      "dark": "Dark",
+      "system": "System"
+    },
+    "language": {
+      "title": "Language",
+      "zh-CN": "简体中文",
+      "en-US": "English",
+      "zh-HK": "繁體中文"
+    },
+    "view": {
+      "title": "Default View",
+      "terminal": "Terminal",
+      "waveform": "Waveform",
+      "split": "Split"
+    },
+    "general": {
+      "closeToTray": "Close to Tray",
+      "autostart": "Launch on Startup"
+    },
+    "about": {
+      "title": "About",
+      "description": "Industrial Serial Debugger",
+      "techStack": "Built with Tauri + Rust + React"
+    }
+  },
+  "serial": {
+    "title": "Serial Config",
+    "port": "Port",
+    "baudRate": "Baud Rate",
+    "dataBits": "Data Bits",
+    "stopBits": "Stop Bits",
+    "parity": "Parity",
+    "parityNone": "None",
+    "parityOdd": "Odd",
+    "parityEven": "Even",
+    "connect": "Open Port",
+    "disconnect": "Disconnect",
+    "noPorts": "No ports available",
+    "refresh": "Refresh"
+  },
+  "terminal": {
+    "title": "Terminal",
+    "clear": "Clear",
+    "send": "Send",
+    "autoSend": "Auto",
+    "placeholder": "Enter text",
+    "hexPlaceholder": "01 03 00 00 00 01"
+  },
+  "waveform": {
+    "title": "Waveform",
+    "channels": "channels",
+    "waiting": "Waiting for data...",
+    "pause": "Pause",
+    "resume": "Resume",
+    "clear": "Clear"
+  },
+  "modbus": {
+    "title": "Modbus RTU",
+    "slaveId": "Slave ID",
+    "functionCode": "Function",
+    "startAddr": "Start Addr",
+    "count": "Count",
+    "send": "Send Modbus"
+  },
+  "status": {
+    "connected": "Connected",
+    "disconnected": "Disconnected"
+  }
+}
