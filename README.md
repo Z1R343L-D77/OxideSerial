@@ -30,23 +30,49 @@
 
 ## 为什么选择 OxideSerial
 
-市面上的串口调试工具，要么界面陈旧、依赖 Java 或 Python 运行时，要么性能不足、无法流畅显示实时波形。OxideSerial 基于 Rust 构建，无运行时依赖，启动速度快，数据处理零延迟，同时提供现代化的暗色主题界面。
+市面上的串口调试工具，要么界面陈旧、依赖 Java 或 Python 运行时，要么性能不足、无法流畅显示实时波形。OxideSerial 基于 Rust 构建，无运行时依赖，启动速度快，数据处理零延迟，同时提供现代化的暗色/亮色主题界面。
 
 ## 功能特点
 
-- **串口连接** — 支持 COM 口自动检测，波特率最高 921600，可配置数据位、停止位、校验位
+### 串口连接
 
-- **终端显示** — ASCII / HEX 双模式收发，实时数据日志
+- 支持 COM 口自动检测，波特率 1200 ~ 4000000
+- 可配置数据位（5-8）、停止位（1-2）、校验位（无/奇/偶）
+- Rust 后台线程持续读取，通过事件机制推送到前端
 
-- **波形显示** — 基于 uPlot 的高性能实时折线图，支持多通道数据自动识别
+### 终端显示
 
-- **Modbus RTU** — 内置 Modbus 协议支持，功能码 01-06，自动帧构建与 CRC16 校验
+- ASCII / HEX 双模式收发
+- 行尾追加（无 / LF / CR / CRLF / LFCR）
+- 发送历史记录（最近 20 条，点击回填）
+- 自动发送（可调间隔）
+- 清空输入按钮
 
-- **三种视图** — 终端模式 / 波形模式 / 分屏模式，按需切换
+### 波形显示
 
-- **后台读取** — Rust 线程持续读取串口数据，通过事件机制推送到前端，零延迟
+- 基于 uPlot 的高性能实时折线图
+- 多通道数据自动识别（CSV 格式 `v1,v2,v3\n`）
+- 滚轮缩放（以鼠标位置为中心，上滚放大，下滚缩小）
+- 左键拖拽平移
+- Auto 模式自动跟随最新数据
+- 暂停/恢复/清空
+- CSV 数据导出
+- 状态栏可调参数：△t 采样间隔、缓冲区上限、Auto 点数对齐
+- 光标位置实时显示时间和通道值
 
-- **自动发送** — 可配置间隔的定时发送功能
+### Modbus RTU
+
+- 功能码 01-06 支持
+- 自动帧构建与 CRC16 校验
+- 响应解析（含异常检测）
+
+### 设置面板
+
+- 主题切换（浅色 / 深色 / 跟随系统）
+- 语言切换（简体中文 / English / 繁體中文）
+- 默认视图模式（终端 / 波形 / 分屏）
+- 关闭到托盘、开机自启
+- 版本号显示
 
 ## 数据格式
 
@@ -73,10 +99,11 @@
 
 请前往 [Release 页](https://github.com/Z1R343L-D77/OxideSerial/releases/latest) 下载
 
-| 系统    | 架构 | 类型     | 文件名                                  |
-| ------- | ---- | -------- | --------------------------------------- |
-| Windows | x64  | Setup    | `OxideSerial_x64-setup.exe`            |
-| Windows | x64  | Portable | `OxideSerial_x64-portable.exe`         |
+| 文件 | 说明 |
+| ---- | ---- |
+| `OxideSerial_x64-setup.exe` | NSIS 安装包 |
+| `OxideSerial_x64.msi` | MSI 安装包 |
+| `OxideSerial_x64.exe` | 便携版（无需安装） |
 
 ### 从源码构建
 
@@ -133,21 +160,28 @@ python test_serial.py COM11 modbus
 | 后端     | Rust + serialport     | 串口通信与数据处理           |
 | 框架     | Tauri 2               | 跨平台桌面应用框架           |
 | 协议     | Modbus RTU            | 工业通信协议支持             |
+| 国际化   | i18next               | 中/英/繁体三语言支持         |
 
 ## 项目结构
 
 ```
 OxideSerial/
-├── src/                        # 前端源码
-│   ├── App.tsx                 # 主界面
-│   ├── App.css                 # 样式
-│   └── components/
-│       └── WaveformPanel.tsx   # 波形显示组件
-├── src-tauri/                  # Rust 后端
-│   ├── src/
-│   │   └── lib.rs              # 串口逻辑、Modbus 协议
-│   └── Cargo.toml              # Rust 依赖
-├── test_serial.py              # 测试脚本
+├── src/                          # 前端源码
+│   ├── App.tsx                   # 主界面
+│   ├── App.css                   # 样式（含亮色/暗色主题变量）
+│   ├── components/
+│   │   ├── WaveformPanel.tsx     # 波形显示组件
+│   │   └── SettingsPanel.tsx     # 设置面板
+│   ├── locales/                  # 国际化翻译
+│   │   ├── zh-CN/translation.json
+│   │   ├── en-US/translation.json
+│   │   └── zh-HK/translation.json
+│   ├── types/config.ts           # 配置类型定义
+│   └── utils/theme.ts            # 主题切换工具
+├── src-tauri/                    # Rust 后端
+│   ├── src/lib.rs                # 串口逻辑、Modbus 协议、事件推送
+│   └── Cargo.toml                # Rust 依赖
+├── test_serial.py                # 测试脚本
 └── README.md
 ```
 
