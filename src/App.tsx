@@ -268,7 +268,7 @@ function App() {
   }, [logs]);
 
   return (
-    <div className="app">
+    <div className="app noise-bg">
       {/* 备注：顶部工具栏 */}
       <header className="header">
         <div className="header-left">

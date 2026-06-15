@@ -8,7 +8,7 @@ interface SettingsPanelProps {
   onClose: () => void;
 }
 
-const VERSION = "0.0.1";
+const VERSION = "0.1.0";
 
 export function SettingsPanel({ config, onChange, onClose }: SettingsPanelProps) {
   const { t, i18n } = useTranslation();

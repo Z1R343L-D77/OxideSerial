@@ -1,10 +1,10 @@
 [package]
-name = "app"
+name = "oxide-serial"
 version = "0.1.0"
-description = "A Tauri App"
-authors = ["you"]
-license = ""
-repository = ""
+description = "Industrial-grade serial port debugger"
+authors = ["Z1R343L-D77"]
+license = "MIT"
+repository = "https://github.com/Z1R343L-D77/OxideSerial"
 edition = "2021"
 rust-version = "1.77.2"
 
