@@ -53,8 +53,12 @@ function App() {
 
   // 备注：设置状态
   const [config, setConfig] = useState<AppConfig>(() => {
-    const saved = localStorage.getItem("app-config");
-    return saved ? { ...DEFAULT_CONFIG, ...JSON.parse(saved) } : DEFAULT_CONFIG;
+    try {
+      const saved = localStorage.getItem("app-config");
+      return saved ? { ...DEFAULT_CONFIG, ...JSON.parse(saved) } : DEFAULT_CONFIG;
+    } catch {
+      return DEFAULT_CONFIG;
+    }
   });
   const [settingsOpen, setSettingsOpen] = useState(false);
 
@@ -146,7 +150,7 @@ function App() {
         setSerialConfig((prev) => ({ ...prev, port_name: portList[0] }));
       }
     } catch (e) {
-      addLog("ERROR", `${t("serial.refresh", { defaultValue: "刷新串口失败" })}: ${e}`);
+      addLog("ERROR", `${t("serial.refreshFail", { defaultValue: "刷新串口失败" })}: ${e}`);
     }
   }, [serialConfig.port_name, addLog, t]);
 
@@ -156,7 +160,7 @@ function App() {
       try {
         await invoke("close_port");
         setStatus({ connected: false, port_name: "", baud_rate: 0 });
-        addLog("INFO", t("status.disconnected", { defaultValue: "串口已关闭" }));
+        addLog("INFO", t("serial.portClosed", { defaultValue: "串口已关闭" }));
       } catch (e) {
         addLog("ERROR", `${e}`);
       }
@@ -272,7 +276,10 @@ function App() {
       {/* 备注：顶部工具栏 */}
       <header className="header">
         <div className="header-left">
-          <h1>OxideSerial</h1>
+          <div className="app-logo-area">
+            <h1>OxideSerial</h1>
+            <span className="app-version">v0.1.1</span>
+          </div>
           <span className={`status-indicator ${status.connected ? "connected" : ""}`}>
             {status.connected
               ? `${t("status.connected", { defaultValue: "已连接" })} ${status.port_name} @ ${status.baud_rate}`
@@ -317,7 +324,12 @@ function App() {
                   {ports.length === 0 && <option value="">{t("serial.noPorts", { defaultValue: "无可用串口" })}</option>}
                   {ports.map((p) => (<option key={p} value={p}>{p}</option>))}
                 </select>
-                <button onClick={refreshPorts} title={t("serial.refresh", { defaultValue: "刷新" })}>🔄</button>
+                <button className="btn-refresh" onClick={refreshPorts} title={t("serial.refresh", { defaultValue: "刷新" })}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M23 4v6h-6" />
+                    <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+                  </svg>
+                </button>
               </div>
             </div>
             <div className="form-group">
@@ -417,9 +429,19 @@ function App() {
                     onKeyDown={(e) => { if (e.key === "Enter" && e.ctrlKey) { e.preventDefault(); handleSend(); } }}
                   />
                   <div className="send-buttons">
-                    <button className="btn-icon" onClick={() => setSendData("")} title="清空输入">✕</button>
+                    <button className="btn-icon clear-btn" onClick={() => setSendData("")} title={t("terminal.clearInput", { defaultValue: "清空输入" })}>
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                      </svg>
+                    </button>
                     <div className="history-wrapper">
-                      <button className="btn-icon" onClick={() => setShowHistory(!showHistory)} title="发送记录">📋</button>
+                      <button className="btn-icon history-btn" onClick={() => setShowHistory(!showHistory)} title={t("terminal.history", { defaultValue: "发送记录" })}>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path>
+                          <rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect>
+                        </svg>
+                      </button>
                       {showHistory && sendHistory.length > 0 && (
                         <div className="history-dropdown">
                           {sendHistory.map((item, index) => (
@@ -438,13 +460,13 @@ function App() {
                       value={lineEnding}
                       onChange={(e) => setLineEnding(e.target.value as typeof lineEnding)}
                       className="line-ending-select"
-                      title="行尾追加"
+                      title={t("terminal.lineEnding", { defaultValue: "行尾追加" })}
                     >
-                      <option value="none">无</option>
-                      <option value="LF">LF (\n)</option>
-                      <option value="CR">CR (\r)</option>
-                      <option value="CRLF">CRLF (\r\n)</option>
-                      <option value="LFCR">LFCR (\n\r)</option>
+                      <option value="none">{t("terminal.lineEndingNone", { defaultValue: "无" })}</option>
+                      <option value="LF">{t("terminal.lineEndingLf", { defaultValue: "LF (\\n)" })}</option>
+                      <option value="CR">{t("terminal.lineEndingCr", { defaultValue: "CR (\\r)" })}</option>
+                      <option value="CRLF">{t("terminal.lineEndingCrLf", { defaultValue: "CRLF (\\r\\n)" })}</option>
+                      <option value="LFCR">{t("terminal.lineEndingLfCr", { defaultValue: "LFCR (\\n\\r)" })}</option>
                     </select>
                     <button className="btn-send" onClick={handleSend} disabled={!status.connected}>
                       {t("terminal.send", { defaultValue: "发送" })}

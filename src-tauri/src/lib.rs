@@ -1,8 +1,12 @@
 use serde::{Deserialize, Serialize};
 use serialport::SerialPort;
 use std::sync::{Arc, Mutex};
+use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 use tauri::Emitter;
+use tauri::menu::{Menu, MenuItem};
+use tauri::tray::{TrayIconBuilder, TrayIconEvent};
+use tauri::Manager;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SerialConfig {
@@ -53,6 +57,8 @@ pub struct AppState {
     pub config: Arc<Mutex<SerialConfig>>,
     pub running: Arc<Mutex<bool>>,
     pub start_time: Instant,
+    pub close_to_tray: Arc<Mutex<bool>>,
+    pub read_thread: Arc<Mutex<Option<JoinHandle<()>>>>,
 }
 
 impl AppState {
@@ -62,8 +68,19 @@ impl AppState {
             config: Arc::new(Mutex::new(SerialConfig::default())),
             running: Arc::new(Mutex::new(false)),
             start_time: Instant::now(),
+            close_to_tray: Arc::new(Mutex::new(true)),
+            read_thread: Arc::new(Mutex::new(None)),
         }
     }
+}
+
+/// 备注：安全锁获取宏，避免 unwrap 导致 panic 连锁
+macro_rules! lock_or_err {
+    ($mutex:expr, $name:expr) => {
+        $mutex
+            .lock()
+            .map_err(|e| format!("{}: {}", $name, e))?
+    };
 }
 
 #[tauri::command]
@@ -107,11 +124,11 @@ fn open_port(
         .map_err(|e| format!("打开串口失败: {e}"))?;
 
     {
-        let mut port_lock = state.port.lock().unwrap();
+        let mut port_lock = lock_or_err!(state.port, "port");
         *port_lock = Some(port);
-        let mut config_lock = state.config.lock().unwrap();
+        let mut config_lock = lock_or_err!(state.config, "config");
         *config_lock = config.clone();
-        let mut running = state.running.lock().unwrap();
+        let mut running = lock_or_err!(state.running, "running");
         *running = true;
     }
 
@@ -120,20 +137,26 @@ fn open_port(
     let running_arc = Arc::clone(&state.running);
     let start_time = state.start_time;
 
-    std::thread::spawn(move || {
+    let handle = std::thread::spawn(move || {
         let mut line_buf = String::new();
         let mut byte_buf = [0u8; 4096];
 
         loop {
             {
-                let running = running_arc.lock().unwrap();
+                let running = match running_arc.lock() {
+                    Ok(guard) => guard,
+                    Err(_) => break,
+                };
                 if !*running {
                     break;
                 }
             }
 
             let read_result = {
-                let mut port_lock = port_arc.lock().unwrap();
+                let mut port_lock = match port_arc.lock() {
+                    Ok(guard) => guard,
+                    Err(_) => break,
+                };
                 match port_lock.as_mut() {
                     Some(port) => match port.read(&mut byte_buf) {
                         Ok(n) => Ok((byte_buf[..n].to_vec(), n)),
@@ -188,6 +211,12 @@ fn open_port(
         }
     });
 
+    // 备注：保存线程句柄
+    {
+        let mut thread_lock = lock_or_err!(state.read_thread, "read_thread");
+        *thread_lock = Some(handle);
+    }
+
     Ok(SerialStatus {
         connected: true,
         port_name: config.port_name,
@@ -226,34 +255,56 @@ fn parse_data_line(line: &str, start_time: Instant) -> Option<DataFrame> {
     })
 }
 
+// 备注：获取本地时间 HH:MM:SS.mmm
 fn chrono_now() -> String {
-    let now = std::time::SystemTime::now()
+    let now = std::time::SystemTime::now();
+    let duration = now
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default();
-    let ms = now.as_millis();
-    let secs = (ms / 1000) % 86400;
-    let hours = secs / 3600;
-    let minutes = (secs % 3600) / 60;
-    let seconds = secs % 60;
-    let millis = ms % 1000;
+    let total_ms = duration.as_millis();
+
+    // 备注：计算本地时间偏移（UTC+8 等）
+    // 使用 time crate 获取本地 UTC 偏移
+    let offset_secs = match time::OffsetDateTime::now_local() {
+        Ok(dt) => dt.offset().whole_seconds() as i128,
+        Err(_) => 0, // 回退到 UTC
+    };
+
+    let local_ms = (total_ms as i128 + offset_secs as i128 * 1000).max(0) as u128;
+    let total_secs = (local_ms / 1000) % 86400;
+    let hours = total_secs / 3600;
+    let minutes = (total_secs % 3600) / 60;
+    let seconds = total_secs % 60;
+    let millis = local_ms % 1000;
     format!("{:02}:{:02}:{:02}.{:03}", hours, minutes, seconds, millis)
 }
 
 #[tauri::command]
 fn close_port(state: tauri::State<AppState>) -> Result<(), String> {
+    // 备注：先停止读取线程，等待其退出，再释放串口
     {
-        let mut running = state.running.lock().unwrap();
+        let mut running = lock_or_err!(state.running, "running");
         *running = false;
     }
-    let mut port_lock = state.port.lock().unwrap();
+
+    // 备注：join 线程，避免竞态
+    {
+        let mut thread_lock = lock_or_err!(state.read_thread, "read_thread");
+        if let Some(handle) = thread_lock.take() {
+            let _ = handle.join();
+        }
+    }
+
+    // 备注：线程已退出，安全释放串口
+    let mut port_lock = lock_or_err!(state.port, "port");
     *port_lock = None;
     Ok(())
 }
 
 #[tauri::command]
 fn get_status(state: tauri::State<AppState>) -> Result<SerialStatus, String> {
-    let port_lock = state.port.lock().unwrap();
-    let config_lock = state.config.lock().unwrap();
+    let port_lock = lock_or_err!(state.port, "port");
+    let config_lock = lock_or_err!(state.config, "config");
     Ok(SerialStatus {
         connected: port_lock.is_some(),
         port_name: config_lock.port_name.clone(),
@@ -267,7 +318,7 @@ fn send_data(
     data: Vec<u8>,
     app: tauri::AppHandle,
 ) -> Result<usize, String> {
-    let mut port_lock = state.port.lock().unwrap();
+    let mut port_lock = lock_or_err!(state.port, "port");
     match port_lock.as_mut() {
         Some(port) => {
             let n = port.write(&data).map_err(|e| format!("发送失败: {e}"))?;
@@ -284,27 +335,6 @@ fn send_data(
             };
             let _ = app.emit("serial-data", &terminal_data);
             Ok(n)
-        }
-        None => Err("串口未连接".into()),
-    }
-}
-
-#[tauri::command]
-fn read_data(state: tauri::State<AppState>) -> Result<Vec<u8>, String> {
-    let mut port_lock = state.port.lock().unwrap();
-    match port_lock.as_mut() {
-        Some(port) => {
-            let mut buf = [0u8; 1024];
-            match port.read(&mut buf) {
-                Ok(n) => Ok(buf[..n].to_vec()),
-                Err(e) => {
-                    if e.kind() == std::io::ErrorKind::TimedOut {
-                        Ok(vec![])
-                    } else {
-                        Err(format!("读取失败: {e}"))
-                    }
-                }
-            }
         }
         None => Err("串口未连接".into()),
     }
@@ -390,6 +420,13 @@ fn parse_modbus_rtu(data: Vec<u8>) -> Result<ModbusResponse, String> {
     })
 }
 
+#[tauri::command]
+fn set_close_to_tray(state: tauri::State<AppState>, enabled: bool) -> Result<(), String> {
+    let mut flag = lock_or_err!(state.close_to_tray, "close_to_tray");
+    *flag = enabled;
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -397,16 +434,75 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_log::Builder::new().build())
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            None::<Vec<&str>>,
+        ))
         .invoke_handler(tauri::generate_handler![
             list_ports,
             open_port,
             close_port,
             get_status,
             send_data,
-            read_data,
             build_modbus_rtu,
             parse_modbus_rtu,
+            set_close_to_tray,
         ])
+        .setup(|app| {
+            // 备注：系统托盘菜单
+            let show_item = MenuItem::with_id(app, "show", "显示窗口", true, None::<&str>)?;
+            let quit_item = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
+            let menu = Menu::with_items(app, &[&show_item, &quit_item])?;
+
+            // 备注：创建托盘图标
+            let _tray = TrayIconBuilder::new()
+                .icon(app.default_window_icon().unwrap().clone())
+                .menu(&menu)
+                .tooltip("OxideSerial")
+                .on_menu_event(move |app, event| match event.id.as_ref() {
+                    "show" => {
+                        if let Some(window) = app.get_webview_window("main") {
+                            let _ = window.show();
+                            let _ = window.set_focus();
+                        }
+                    }
+                    "quit" => {
+                        app.exit(0);
+                    }
+                    _ => {}
+                })
+                .on_tray_icon_event(|tray, event| {
+                    if let TrayIconEvent::Click {
+                        button: tauri::tray::MouseButton::Left,
+                        button_state: tauri::tray::MouseButtonState::Up,
+                        ..
+                    } = event
+                    {
+                        let app = tray.app_handle();
+                        if let Some(window) = app.get_webview_window("main") {
+                            let _ = window.show();
+                            let _ = window.set_focus();
+                        }
+                    }
+                })
+                .build(app)?;
+
+            Ok(())
+        })
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                // 备注：根据 close_to_tray 设置决定隐藏还是退出
+                let state = window.state::<AppState>();
+                let should_tray = match state.close_to_tray.lock() {
+                    Ok(guard) => *guard,
+                    Err(_) => true, // 默认隐藏到托盘
+                };
+                if should_tray {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
+            }
+        })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

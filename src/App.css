@@ -545,28 +545,48 @@ input:hover {
 
 .port-row {
   display: flex;
-  gap: 6px;
+  gap: 8px;
 }
 
 .port-row select {
   flex: 1;
+  height: 32px;
+}
+
+.sidebar select,
+.sidebar input[type="number"] {
+  height: 32px;
 }
 
 .port-row button {
   background: var(--bg-tertiary);
   border: 1px solid var(--border);
   border-radius: 8px;
-  color: var(--text-primary);
-  padding: 5px 8px;
+  color: var(--text-secondary);
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   cursor: pointer;
-  font-size: 12px;
-  transition: all 0.2s ease-out;
+  transition: all 0.2s var(--ease-out);
 }
 
 .port-row button:hover {
   border-color: var(--accent);
   color: var(--accent);
-  transform: translateY(-1px);
+  background: rgba(232, 168, 73, 0.08);
+}
+
+.port-row button svg {
+  width: 14px;
+  height: 14px;
+  transition: transform 0.4s var(--ease-out);
+}
+
+.port-row button:hover svg {
+  transform: rotate(360deg);
 }
 
 /* ========== 按钮 ========== */
@@ -644,8 +664,12 @@ button:active {
 .btn-send {
   background: linear-gradient(135deg, var(--purple), #9a7ad0);
   color: white;
-  min-width: 64px;
-  padding: 7px 14px;
+  min-width: 72px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 16px;
   box-shadow: 0 2px 8px rgba(176, 141, 224, 0.25);
 }
 
@@ -911,6 +935,7 @@ button:active {
 .send-row {
   display: flex;
   gap: 8px;
+  align-items: center;
 }
 
 .send-row textarea {
@@ -940,31 +965,56 @@ button:active {
 .send-buttons {
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 8px;
   flex-shrink: 0;
 }
 
 .btn-icon {
-  width: 30px;
-  height: 30px;
+  width: 36px;
+  height: 36px;
   background: var(--bg-tertiary);
   border: 1px solid var(--border);
   border-radius: 8px;
   color: var(--text-secondary);
-  font-size: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   padding: 0;
-  transition: all 0.2s ease-out;
+  transition: all 0.2s var(--ease-out);
 }
 
 .btn-icon:hover {
-  background: var(--border);
+  background: rgba(255, 255, 255, 0.03);
   color: var(--text-primary);
   transform: translateY(-1px);
   box-shadow: var(--shadow-sm);
+}
+
+.btn-icon.clear-btn {
+  width: 64px;
+}
+
+.btn-icon.clear-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.btn-icon.history-btn svg {
+  width: 15px;
+  height: 15px;
+}
+
+.btn-icon.clear-btn:hover {
+  border-color: var(--danger);
+  color: var(--danger);
+  background: rgba(232, 116, 98, 0.08);
+}
+
+.btn-icon.history-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: rgba(232, 168, 73, 0.08);
 }
 
 /* ========== 历史记录 ========== */
@@ -1015,13 +1065,13 @@ button:active {
 /* ========== 行尾选择 ========== */
 
 .line-ending-select {
-  height: 30px;
-  padding: 0 6px;
+  height: 36px;
+  padding: 0 4px;
   background: var(--bg-tertiary);
   border: 1px solid var(--border);
   border-radius: 8px;
   color: var(--text-primary);
-  font-size: 11px;
+  font-size: 10px;
   font-family: "Consolas", monospace;
   outline: none;
   cursor: pointer;
@@ -1039,4 +1089,123 @@ input[type="checkbox"],
 input[type="radio"] {
   accent-color: var(--accent);
   cursor: pointer;
+}
+
+/* ========== 顶部版本号样式 ========== */
+.app-logo-area {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.app-version {
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--text-muted);
+  font-family: "Consolas", monospace;
+  padding: 1px 4px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  line-height: 1;
+}
+
+/* ========== 波形侧边栏 (模仿 VOFA+) ========== */
+.waveform-layout {
+  display: flex;
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--bg-primary);
+}
+
+.waveform-sidebar {
+  width: 200px;
+  min-width: 200px;
+  background: var(--bg-secondary);
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+.waveform-sidebar-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.waveform-sidebar-header svg {
+  color: var(--text-secondary);
+}
+
+.waveform-sidebar-list {
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.waveform-sidebar-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: transparent;
+  transition: background 0.2s var(--ease-out);
+}
+
+.waveform-sidebar-item:hover {
+  background: var(--bg-tertiary);
+}
+
+.waveform-sidebar-item.hidden {
+  opacity: 0.65;
+}
+
+.btn-visibility {
+  background: transparent;
+  border: none;
+  padding: 4px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: all 0.2s var(--ease-out);
+}
+
+.btn-visibility:hover {
+  background: var(--border);
+  color: var(--text-primary);
+}
+
+.waveform-sidebar-item.hidden .btn-visibility {
+  color: var(--text-muted);
+}
+
+.waveform-sidebar-item .channel-name {
+  font-size: 11px;
+  font-weight: 600;
+  flex: 1;
+  font-family: "Consolas", monospace;
+}
+
+.waveform-sidebar-item .channel-value {
+  font-size: 11px;
+  font-weight: 700;
+  font-family: "Consolas", monospace;
+  text-align: right;
 }

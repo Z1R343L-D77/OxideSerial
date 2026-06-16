@@ -46,7 +46,9 @@
     "connect": "打开串口",
     "disconnect": "断开",
     "noPorts": "无可用串口",
-    "refresh": "刷新"
+    "refresh": "刷新",
+    "refreshFail": "刷新串口失败",
+    "portClosed": "串口已关闭"
   },
   "terminal": {
     "title": "终端",
@@ -54,15 +56,32 @@
     "send": "发送",
     "autoSend": "自动",
     "placeholder": "输入文本",
-    "hexPlaceholder": "01 03 00 00 00 01"
+    "hexPlaceholder": "01 03 00 00 00 01",
+    "clearInput": "清空输入",
+    "history": "发送记录",
+    "lineEnding": "行尾追加",
+    "lineEndingNone": "无",
+    "lineEndingLf": "LF (\\n)",
+    "lineEndingCr": "CR (\\r)",
+    "lineEndingCrLf": "CRLF (\\r\\n)",
+    "lineEndingLfCr": "LFCR (\\n\\r)"
   },
   "waveform": {
-    "title": "波形显示",
+    "title": "波形",
     "channels": "通道",
     "waiting": "等待数据...",
     "pause": "暂停",
-    "resume": "恢复",
-    "clear": "清空"
+    "resume": "继续",
+    "clear": "清空",
+    "auto": "Auto",
+    "csv": "CSV",
+    "time": "时间",
+    "latest": "最新",
+    "deltaT": "△t",
+    "bufferLimit": "缓冲区上限",
+    "perChannel": "/ch",
+    "autoPoints": "Auto点数对齐",
+    "sidebarData": "数据"
   },
   "modbus": {
     "title": "Modbus RTU",

@@ -1,6 +1,6 @@
 [package]
 name = "oxide-serial"
-version = "0.1.0"
+version = "0.1.1"
 description = "Industrial-grade serial port debugger"
 authors = ["Z1R343L-D77"]
 license = "MIT"
@@ -21,9 +21,10 @@ tauri-build = { version = "2.6.2", features = [] }
 serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 log = "0.4"
-tauri = { version = "2.11.2", features = [] }
+tauri = { version = "2.11.2", features = ["tray-icon"] }
 tauri-plugin-log = "2"
 serialport = "4"
 time = "=0.3.36"
 tauri-plugin-dialog = "2.7.1"
 tauri-plugin-fs = "2"
+tauri-plugin-autostart = "2"

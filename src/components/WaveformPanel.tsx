@@ -6,6 +6,7 @@ import {
   type MouseEvent as ReactMouseEvent,
   type WheelEvent as ReactWheelEvent,
 } from "react";
+import { useTranslation } from "react-i18next";
 import { save } from "@tauri-apps/plugin-dialog";
 import uPlot from "uplot";
 import "uplot/dist/uPlot.min.css";
@@ -72,6 +73,7 @@ function clampIndex(index: number, length: number): number {
 type ViewMode = "auto" | "browse";
 
 export function WaveformPanel({ frame }: WaveformPanelProps) {
+  const { t } = useTranslation();
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<uPlot | null>(null);
 
@@ -83,7 +85,15 @@ export function WaveformPanel({ frame }: WaveformPanelProps) {
     time: 0,
     values: [],
   });
-  const [clearedUntilTimestamp, setClearedUntilTimestamp] = useState<number>(Number.POSITIVE_INFINITY);
+  const [clearedUntilTimestamp, setClearedUntilTimestamp] = useState<number>(0);
+  const [hiddenChannels, setHiddenChannels] = useState<Record<number, boolean>>({});
+
+  const toggleChannelVisibility = useCallback((chIdx: number) => {
+    setHiddenChannels((prev) => ({
+      ...prev,
+      [chIdx]: !prev[chIdx],
+    }));
+  }, []);
 
   // 备注：可调波形参数
   const [deltaT, setDeltaT] = useState(50);          // △t 采样间隔 ms
@@ -99,6 +109,9 @@ export function WaveformPanel({ frame }: WaveformPanelProps) {
     timestamps: [],
     channels: [],
   });
+
+  // 备注：rAF 合并多帧为单次渲染
+  const rafIdRef = useRef(0);
 
   const latestSample: SampleInfo =
     frame && frame.timestamp > clearedUntilTimestamp
@@ -172,7 +185,7 @@ export function WaveformPanel({ frame }: WaveformPanelProps) {
 
     const series: uPlot.Series[] = [
       {
-        label: "时间",
+        label: t("waveform.time", { defaultValue: "时间" }),
         value: (_u, v) => fmtTime(v),
       },
     ];
@@ -184,6 +197,7 @@ export function WaveformPanel({ frame }: WaveformPanelProps) {
         width: 1.5,
         points: { show: false },
         value: (_u, v) => fmtValue(v),
+        show: !hiddenChannels[index],
       });
     }
 
@@ -251,7 +265,18 @@ export function WaveformPanel({ frame }: WaveformPanelProps) {
     if (bufferRef.current.timestamps.length > 0) {
       renderChart(true);
     }
-  }, [renderChart]);
+  }, [renderChart, hiddenChannels, t]);
+
+  useEffect(() => {
+    const chart = chartRef.current;
+    if (!chart) return;
+    for (let index = 0; index < channelCount; index++) {
+      const isShow = !hiddenChannels[index];
+      if (chart.series[index + 1]) {
+        chart.setSeries(index + 1, { show: isShow });
+      }
+    }
+  }, [hiddenChannels, channelCount]);
 
   useEffect(() => {
     if (!frame) return;
@@ -282,14 +307,20 @@ export function WaveformPanel({ frame }: WaveformPanelProps) {
     }
 
     while (timestamps.length > bufferLimit) {
-      timestamps.shift();
+      // 备注：用 splice 批量淘汰，替代逐个 shift (O(n) → O(n) 但只调一次)
+      const excess = timestamps.length - bufferLimit;
+      timestamps.splice(0, excess);
       for (const channel of channels) {
-        channel.shift();
+        channel.splice(0, excess);
       }
     }
 
     if (!pausedRef.current && !panningRef.current && viewModeRef.current === "auto") {
-      renderChart(true);
+      // 备注：用 rAF 合并同帧内的多次数据更新为一次渲染
+      cancelAnimationFrame(rafIdRef.current);
+      rafIdRef.current = requestAnimationFrame(() => {
+        renderChart(true);
+      });
     }
   }, [frame, bufferLimit, initChart, renderChart]);
 
@@ -375,6 +406,7 @@ export function WaveformPanel({ frame }: WaveformPanelProps) {
 
   useEffect(() => {
     return () => {
+      cancelAnimationFrame(rafIdRef.current);
       chartRef.current?.destroy();
       chartRef.current = null;
     };
@@ -402,7 +434,7 @@ export function WaveformPanel({ frame }: WaveformPanelProps) {
       channels: Array.from({ length: channelCount }, () => []),
     };
     setCursorInfo({ visible: false, time: 0, values: [] });
-    setClearedUntilTimestamp(frame?.timestamp ?? Number.POSITIVE_INFINITY);
+    setClearedUntilTimestamp(frame?.timestamp ?? 0);
     chartRef.current?.setData(
       [new Float64Array(0), ...Array.from({ length: channelCount }, () => new Float64Array(0))],
       true,
@@ -498,64 +530,109 @@ export function WaveformPanel({ frame }: WaveformPanelProps) {
     ? `T ${fmtTime(cursorInfo.time)} | ${cursorInfo.values.map((value, index) => `CH${index + 1} ${fmtValue(value)}`).join("  ")}`
     : latestSample.time != null
       ? `Latest ${fmtTime(latestSample.time)} | ${latestSample.values.map((value, index) => `CH${index + 1} ${fmtValue(value)}`).join("  ")}`
-      : "等待数据...";
+      : t("waveform.waiting", { defaultValue: "等待数据..." });
 
   return (
-    <div className="waveform-panel">
-      <div className="waveform-toolbar">
-        <span className="waveform-title">波形</span>
-        <span className="waveform-channels">
-          {channelCount > 0 ? `${channelCount} CH | ${cursorText}` : "等待数据..."}
-        </span>
-        <button className={`btn-small ${paused ? "btn-resume" : "btn-pause"}`} onClick={handleTogglePause}>
-          {paused ? "▶ 继续" : "⏸ 暂停"}
-        </button>
-        <button className={`btn-small ${viewMode === "auto" ? "btn-active" : ""}`} onClick={handleAuto}>Auto</button>
-        <button className="btn-small" onClick={() => void exportCsv()}>CSV</button>
-        <button className="btn-small btn-clear" onClick={handleClear}>✕</button>
+    <div className="waveform-layout">
+      <div className="waveform-panel">
+        <div className="waveform-toolbar">
+          <span className="waveform-title">{t("waveform.title", { defaultValue: "波形" })}</span>
+          <span className="waveform-channels">
+            {channelCount > 0 ? `${channelCount} CH | ${cursorText}` : t("waveform.waiting", { defaultValue: "等待数据..." })}
+          </span>
+          <button className={`btn-small ${paused ? "btn-resume" : "btn-pause"}`} onClick={handleTogglePause}>
+            {paused ? `▶ ${t("waveform.resume", { defaultValue: "继续" })}` : `⏸ ${t("waveform.pause", { defaultValue: "暂停" })}`}
+          </button>
+          <button className={`btn-small ${viewMode === "auto" ? "btn-active" : ""}`} onClick={handleAuto}>{t("waveform.auto", { defaultValue: "Auto" })}</button>
+          <button className="btn-small" onClick={() => void exportCsv()}>{t("waveform.csv", { defaultValue: "CSV" })}</button>
+          <button className="btn-small btn-clear" onClick={handleClear}>✕</button>
+        </div>
+        <div
+          className="waveform-container"
+          ref={containerRef}
+          onMouseDown={handleMouseDown}
+          onWheel={handleWheel}
+        />
+        {/* 备注：状态栏 - 可调参数 */}
+        <div className="waveform-statusbar">
+          <label className="statusbar-item">
+            {t("waveform.deltaT", { defaultValue: "△t" })}:
+            <input
+              type="number"
+              min={1}
+              value={deltaT}
+              onChange={(e) => setDeltaT(Math.max(1, Number(e.target.value)))}
+              className="statusbar-input"
+            />
+            ms
+          </label>
+          <label className="statusbar-item">
+            {t("waveform.bufferLimit", { defaultValue: "缓冲区上限" })}:
+            <input
+              type="number"
+              min={1000}
+              step={1000}
+              value={bufferLimit}
+              onChange={(e) => setBufferLimit(Math.max(1000, Number(e.target.value)))}
+              className="statusbar-input"
+            />
+            {t("waveform.perChannel", { defaultValue: "/ch" })}
+          </label>
+          <label className="statusbar-item">
+            {t("waveform.autoPoints", { defaultValue: "Auto点数对齐" })}:
+            <input
+              type="number"
+              min={10}
+              value={autoPoints}
+              onChange={(e) => setAutoPoints(Math.max(10, Number(e.target.value)))}
+              className="statusbar-input"
+            />
+          </label>
+        </div>
       </div>
-      <div
-        className="waveform-container"
-        ref={containerRef}
-        onMouseDown={handleMouseDown}
-        onWheel={handleWheel}
-      />
-      {/* 备注：状态栏 - 可调参数 */}
-      <div className="waveform-statusbar">
-        <label className="statusbar-item">
-          △t:
-          <input
-            type="number"
-            min={1}
-            value={deltaT}
-            onChange={(e) => setDeltaT(Math.max(1, Number(e.target.value)))}
-            className="statusbar-input"
-          />
-          ms
-        </label>
-        <label className="statusbar-item">
-          缓冲区上限:
-          <input
-            type="number"
-            min={1000}
-            step={1000}
-            value={bufferLimit}
-            onChange={(e) => setBufferLimit(Math.max(1000, Number(e.target.value)))}
-            className="statusbar-input"
-          />
-          /ch
-        </label>
-        <label className="statusbar-item">
-          Auto点数对齐:
-          <input
-            type="number"
-            min={10}
-            value={autoPoints}
-            onChange={(e) => setAutoPoints(Math.max(10, Number(e.target.value)))}
-            className="statusbar-input"
-          />
-        </label>
-      </div>
+      <aside className="waveform-sidebar">
+        <div className="waveform-sidebar-header">
+          <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+            <circle cx="12" cy="12" r="3"></circle>
+          </svg>
+          <span>{t("waveform.sidebarData", { defaultValue: "数据" })}</span>
+        </div>
+        <div className="waveform-sidebar-list">
+          {Array.from({ length: channelCount }).map((_, index) => {
+            const isHidden = !!hiddenChannels[index];
+            const color = CHANNEL_COLORS[index % CHANNEL_COLORS.length];
+            const val = frame ? (frame.values[index] ?? null) : null;
+            return (
+              <div key={index} className={`waveform-sidebar-item ${isHidden ? "hidden" : ""}`}>
+                <button
+                  className="btn-visibility"
+                  onClick={() => toggleChannelVisibility(index)}
+                  title={isHidden ? "显示通道" : "屏蔽通道"}
+                >
+                  {isHidden ? (
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
+                      <line x1="1" y1="1" x2="23" y2="23"></line>
+                    </svg>
+                  ) : (
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                      <circle cx="12" cy="12" r="3"></circle>
+                    </svg>
+                  )}
+                </button>
+                <span className="channel-name" style={{ color: isHidden ? "var(--text-muted)" : color }}>
+                  CH{index + 1}
+                </span>
+                <span className="channel-value" style={{ color: isHidden ? "var(--text-muted)" : color }}>
+                  {fmtValue(val)}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </aside>
     </div>
   );
 }

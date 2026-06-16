@@ -46,7 +46,9 @@
     "connect": "Open Port",
     "disconnect": "Disconnect",
     "noPorts": "No ports available",
-    "refresh": "Refresh"
+    "refresh": "Refresh",
+    "refreshFail": "Failed to refresh ports",
+    "portClosed": "Port closed"
   },
   "terminal": {
     "title": "Terminal",
@@ -54,7 +56,15 @@
     "send": "Send",
     "autoSend": "Auto",
     "placeholder": "Enter text",
-    "hexPlaceholder": "01 03 00 00 00 01"
+    "hexPlaceholder": "01 03 00 00 00 01",
+    "clearInput": "Clear input",
+    "history": "Send history",
+    "lineEnding": "Line ending",
+    "lineEndingNone": "None",
+    "lineEndingLf": "LF (\\n)",
+    "lineEndingCr": "CR (\\r)",
+    "lineEndingCrLf": "CRLF (\\r\\n)",
+    "lineEndingLfCr": "LFCR (\\n\\r)"
   },
   "waveform": {
     "title": "Waveform",
@@ -62,7 +72,16 @@
     "waiting": "Waiting for data...",
     "pause": "Pause",
     "resume": "Resume",
-    "clear": "Clear"
+    "clear": "Clear",
+    "auto": "Auto",
+    "csv": "CSV",
+    "time": "Time",
+    "latest": "Latest",
+    "deltaT": "Δt",
+    "bufferLimit": "Buffer limit",
+    "perChannel": "/ch",
+    "autoPoints": "Auto align",
+    "sidebarData": "Data"
   },
   "modbus": {
     "title": "Modbus RTU",

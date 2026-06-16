@@ -1,6 +1,9 @@
+import { useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
+import { invoke } from "@tauri-apps/api/core";
 import { applyTheme, watchSystemTheme } from "../utils/theme";
 import type { AppConfig, ThemeOption, ViewMode } from "../types/config";
+import { enable, disable, isEnabled } from "@tauri-apps/plugin-autostart";
 
 interface SettingsPanelProps {
   config: AppConfig;
@@ -8,7 +11,7 @@ interface SettingsPanelProps {
   onClose: () => void;
 }
 
-const VERSION = "0.1.0";
+const VERSION = "0.1.1";
 
 export function SettingsPanel({ config, onChange, onClose }: SettingsPanelProps) {
   const { t, i18n } = useTranslation();
@@ -28,6 +31,28 @@ export function SettingsPanel({ config, onChange, onClose }: SettingsPanelProps)
     i18n.changeLanguage(locale);
     localStorage.setItem("app-locale", locale);
   };
+
+  // 备注：同步开机自启状态
+  useEffect(() => {
+    isEnabled().then((enabled) => {
+      if (enabled !== config.autostart) {
+        setConfigValue("autostart", enabled);
+      }
+    }).catch(() => {});
+  }, []);
+
+  const handleAutostartToggle = useCallback(async (v: boolean) => {
+    try {
+      if (v) {
+        await enable();
+      } else {
+        await disable();
+      }
+      setConfigValue("autostart", v);
+    } catch (e) {
+      console.error("autostart toggle failed:", e);
+    }
+  }, [config]);
 
   return (
     <div className="settings-panel">
@@ -90,12 +115,15 @@ export function SettingsPanel({ config, onChange, onClose }: SettingsPanelProps)
         <ToggleRow
           label={t("settings.general.closeToTray", { defaultValue: "关闭到托盘" })}
           checked={config.closeToTray}
-          onChange={(v) => setConfigValue("closeToTray", v)}
+          onChange={(v) => {
+            setConfigValue("closeToTray", v);
+            void invoke("set_close_to_tray", { enabled: v });
+          }}
         />
         <ToggleRow
           label={t("settings.general.autostart", { defaultValue: "开机自启" })}
           checked={config.autostart}
-          onChange={(v) => setConfigValue("autostart", v)}
+          onChange={(v) => void handleAutostartToggle(v)}
         />
       </section>
 
