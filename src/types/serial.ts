@@ -32,4 +32,6 @@ export interface LogEntry {
   timestamp: string;
   direction: string;
   data: string;
+  hex: string;
+  ascii: string;
 }

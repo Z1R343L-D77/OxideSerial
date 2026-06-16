@@ -57,6 +57,7 @@
     "autoSend": "Auto",
     "placeholder": "Enter text",
     "hexPlaceholder": "01 03 00 00 00 01",
+    "export": "Export",
     "clearInput": "Clear input",
     "history": "Send history",
     "lineEnding": "Line ending",

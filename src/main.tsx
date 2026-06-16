@@ -2,6 +2,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { initI18n } from './locales'
 import { applyTheme, watchSystemTheme } from './utils/theme'
+import { ErrorBoundary } from './components/ErrorBoundary'
 import App from './App.tsx'
 
 // 备注：初始化 i18n 和主题
@@ -14,6 +15,8 @@ watchSystemTheme(savedTheme)
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <App />
+    <ErrorBoundary>
+      <App />
+    </ErrorBoundary>
   </StrictMode>,
 )

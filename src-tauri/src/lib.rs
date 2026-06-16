@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use serialport::SerialPort;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
@@ -59,6 +60,8 @@ pub struct AppState {
     pub start_time: Instant,
     pub close_to_tray: Arc<Mutex<bool>>,
     pub read_thread: Arc<Mutex<Option<JoinHandle<()>>>>,
+    pub rx_bytes: Arc<AtomicU64>,
+    pub tx_bytes: Arc<AtomicU64>,
 }
 
 impl AppState {
@@ -70,6 +73,8 @@ impl AppState {
             start_time: Instant::now(),
             close_to_tray: Arc::new(Mutex::new(true)),
             read_thread: Arc::new(Mutex::new(None)),
+            rx_bytes: Arc::new(AtomicU64::new(0)),
+            tx_bytes: Arc::new(AtomicU64::new(0)),
         }
     }
 }
@@ -136,10 +141,12 @@ fn open_port(
     let port_arc = Arc::clone(&state.port);
     let running_arc = Arc::clone(&state.running);
     let start_time = state.start_time;
+    let rx_counter = Arc::clone(&state.rx_bytes);
 
     let handle = std::thread::spawn(move || {
         let mut line_buf = String::new();
         let mut byte_buf = [0u8; 4096];
+        const MAX_LINE_LEN: usize = 65536; // R5: line_buf 最大 64KB
 
         loop {
             {
@@ -177,6 +184,9 @@ fn open_port(
 
             match read_result {
                 Ok((data, n)) if n > 0 => {
+                    // M10: RX 字节计数
+                    rx_counter.fetch_add(n as u64, Ordering::Relaxed);
+
                     let hex_str: String = data
                         .iter()
                         .map(|b| format!("{:02X}", b))
@@ -194,6 +204,12 @@ fn open_port(
 
                     // 备注：解析数值行用于波形
                     line_buf.push_str(&ascii_str);
+
+                    // R5: line_buf 长度限制
+                    if line_buf.len() > MAX_LINE_LEN {
+                        line_buf.clear();
+                    }
+
                     while let Some(pos) = line_buf.find('\n') {
                         let line = line_buf[..pos].trim().to_string();
                         line_buf = line_buf[pos + 1..].to_string();
@@ -203,6 +219,11 @@ fn open_port(
                             }
                         }
                     }
+                }
+                Err(e) => {
+                    // R1: 串口断开检测 — 发送错误事件到前端
+                    let _ = app.emit("serial-error", &e);
+                    break;
                 }
                 _ => {
                     std::thread::sleep(Duration::from_millis(10));
@@ -296,7 +317,19 @@ fn close_port(state: tauri::State<AppState>) -> Result<(), String> {
     // 备注：线程已退出，安全释放串口
     let mut port_lock = lock_or_err!(state.port, "port");
     *port_lock = None;
+
+    // M10: 重置计数器
+    state.rx_bytes.store(0, std::sync::atomic::Ordering::Relaxed);
+    state.tx_bytes.store(0, std::sync::atomic::Ordering::Relaxed);
     Ok(())
+}
+
+// M10: 获取收发字节统计
+#[tauri::command]
+fn get_byte_stats(state: tauri::State<AppState>) -> Result<(u64, u64), String> {
+    let rx = state.rx_bytes.load(std::sync::atomic::Ordering::Relaxed);
+    let tx = state.tx_bytes.load(std::sync::atomic::Ordering::Relaxed);
+    Ok((rx, tx))
 }
 
 #[tauri::command]
@@ -320,6 +353,8 @@ fn send_data(
     match port_lock.as_mut() {
         Some(port) => {
             let n = port.write(&data).map_err(|e| format!("发送失败: {e}"))?;
+            // M10: TX 字节计数
+            state.tx_bytes.fetch_add(n as u64, std::sync::atomic::Ordering::Relaxed);
             let hex_str: String = data
                 .iter()
                 .map(|b| format!("{:02X}", b))
@@ -445,6 +480,7 @@ pub fn run() {
             build_modbus_rtu,
             parse_modbus_rtu,
             set_close_to_tray,
+            get_byte_stats,
         ])
         .setup(|app| {
             // 备注：系统托盘菜单

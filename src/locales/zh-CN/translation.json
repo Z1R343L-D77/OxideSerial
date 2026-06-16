@@ -57,6 +57,7 @@
     "autoSend": "自动",
     "placeholder": "输入文本",
     "hexPlaceholder": "01 03 00 00 00 01",
+    "export": "导出",
     "clearInput": "清空输入",
     "history": "发送记录",
     "lineEnding": "行尾追加",

@@ -6,7 +6,7 @@ import { WaveformPanel } from "./components/WaveformPanel";
 import { SettingsPanel } from "./components/SettingsPanel";
 import type { SerialConfig, SerialStatus, TerminalData, DataFrame, LogEntry } from "./types/serial";
 import type { AppConfig, ViewMode } from "./types/config";
-import { DEFAULT_CONFIG } from "./types/config";
+import { DEFAULT_CONFIG, APP_VERSION } from "./types/config";
 import { applyTheme, watchSystemTheme } from "./utils/theme";
 import "./App.css";
 
@@ -53,6 +53,21 @@ function App() {
   const showHexRef = useRef(false);
   const [sendData, setSendData] = useState("");
   const sendDataRef = useRef("");
+
+  // 备注：切换 ASCII/HEX 时自动转换输入框格式
+  const handleSendModeChange = useCallback((mode: "ascii" | "hex") => {
+    setSendData((prev) => {
+      if (mode === "hex") {
+        // ASCII → HEX：去除空格，每 2 字符加空格
+        const raw = prev.replace(/\s/g, "");
+        return raw.replace(/(.{2})/g, "$1 ").trim();
+      } else {
+        // HEX → ASCII：去除空格
+        return prev.replace(/\s/g, "");
+      }
+    });
+    setSendMode(mode);
+  }, []);
   const [autoSend, setAutoSend] = useState(false);
   const [autoSendInterval, setAutoSendInterval] = useState(1000);
   const [lineEnding, setLineEnding] = useState<"none" | "LF" | "CR" | "CRLF" | "LFCR">("none");
@@ -65,6 +80,9 @@ function App() {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const logIdRef = useRef(0);
   const logContainerRef = useRef<HTMLDivElement>(null);
+
+  // M10: RX/TX 字节计数
+  const [byteStats, setByteStats] = useState<[number, number]>([0, 0]);
 
   // 备注：波形数据
   const [waveformFrame, setWaveformFrame] = useState<DataFrame | null>(null);
@@ -86,30 +104,60 @@ function App() {
     setViewMode(nextConfig.defaultViewMode);
   }, []);
 
-  // 备注：添加日志
-  const addLog = useCallback((direction: string, data: string) => {
+  // 备注：添加日志（同时存储 hex 和 ascii，渲染时根据 showHex 切换）
+  const addLog = useCallback((direction: string, hex: string, ascii: string) => {
     const id = ++logIdRef.current;
-    const timestamp = new Date().toLocaleTimeString("zh-CN", { hour12: false });
-    setLogs((prev) => [...prev.slice(-1999), { id, timestamp, direction, data }]);
-  }, []);
+    const locale = config.locale || "zh-CN";
+    const timestamp = new Date().toLocaleTimeString(locale, { hour12: false });
+    setLogs((prev) => [...prev.slice(-1999), { id, timestamp, direction, data: "", hex, ascii }]);
+  }, [config.locale]);
+
+  // 备注：添加普通日志（非串口数据，如 INFO/ERROR）
+  const addTextLog = useCallback((direction: string, text: string) => {
+    const id = ++logIdRef.current;
+    const locale = config.locale || "zh-CN";
+    const timestamp = new Date().toLocaleTimeString(locale, { hour12: false });
+    setLogs((prev) => [...prev.slice(-1999), { id, timestamp, direction, data: text, hex: "", ascii: text }]);
+  }, [config.locale]);
 
   // 备注：监听串口数据事件（showHex 通过 ref 读取，避免重建监听器）
   useEffect(() => {
     const unlisten1 = listen<TerminalData>("serial-data", (event) => {
       const d = event.payload;
-      const display = showHexRef.current ? d.hex : d.ascii;
-      addLog(d.direction, `[${d.timestamp}] ${display}`);
+      addLog(d.direction, `[${d.timestamp}] ${d.hex}`, `[${d.timestamp}] ${d.ascii}`);
     });
 
     const unlisten2 = listen<DataFrame>("waveform-data", (event) => {
       setWaveformFrame(event.payload);
     });
 
+    // R1: 监听串口断开事件
+    const unlisten3 = listen<string>("serial-error", (event) => {
+      addTextLog("ERROR", `串口错误: ${event.payload}`);
+      setStatus({ connected: false, port_name: "", baud_rate: 0 });
+      void invoke("close_port").catch(() => {});
+    });
+
     return () => {
       void unlisten1.then((fn) => fn());
       void unlisten2.then((fn) => fn());
+      void unlisten3.then((fn) => fn());
     };
   }, [addLog]);
+
+  // M10: 定时轮询 RX/TX 字节统计
+  useEffect(() => {
+    if (!status.connected) {
+      setByteStats([0, 0]);
+      return;
+    }
+    const timer = setInterval(() => {
+      invoke<[number, number]>("get_byte_stats").then((stats) => {
+        setByteStats(stats);
+      }).catch(() => {});
+    }, 500);
+    return () => clearInterval(timer);
+  }, [status.connected]);
 
   // 备注：刷新串口列表
   const refreshPorts = useCallback(async () => {
@@ -120,7 +168,7 @@ function App() {
         setSerialConfig((prev) => ({ ...prev, port_name: portList[0] }));
       }
     } catch (e) {
-      addLog("ERROR", `${t("serial.refreshFail", { defaultValue: "刷新串口失败" })}: ${e}`);
+      addTextLog("ERROR", `${t("serial.refreshFail", { defaultValue: "刷新串口失败" })}: ${e}`);
     }
   }, [serialConfig.port_name, addLog, t]);
 
@@ -130,17 +178,17 @@ function App() {
       try {
         await invoke("close_port");
         setStatus({ connected: false, port_name: "", baud_rate: 0 });
-        addLog("INFO", t("serial.portClosed", { defaultValue: "串口已关闭" }));
+        addTextLog("INFO", t("serial.portClosed", { defaultValue: "串口已关闭" }));
       } catch (e) {
-        addLog("ERROR", `${e}`);
+        addTextLog("ERROR", `${e}`);
       }
     } else {
       try {
         const result = await invoke<SerialStatus>("open_port", { config: serialConfig });
         setStatus(result);
-        addLog("INFO", `${t("status.connected", { defaultValue: "已连接" })}: ${serialConfig.port_name} @ ${serialConfig.baud_rate}`);
+        addTextLog("INFO", `${t("status.connected", { defaultValue: "已连接" })}: ${serialConfig.port_name} @ ${serialConfig.baud_rate}`);
       } catch (e) {
-        addLog("ERROR", `${e}`);
+        addTextLog("ERROR", `${e}`);
       }
     }
   }, [status.connected, serialConfig, addLog, t]);
@@ -167,8 +215,9 @@ function App() {
       let bytes: number[];
       if (currentSendMode === "hex") {
         const hexStr = currentSendData.replace(/\s+/g, "");
-        if (hexStr.length % 2 !== 0) {
-          addLog("ERROR", "HEX");
+        // R3: 校验 HEX 输入合法性
+        if (hexStr.length % 2 !== 0 || !/^[0-9a-fA-F]*$/.test(hexStr)) {
+          addTextLog("ERROR", "HEX 格式错误：包含非法字符或长度为奇数");
           return;
         }
         bytes = [];
@@ -198,7 +247,7 @@ function App() {
         return [currentSendData, ...filtered].slice(0, sendHistoryLimit);
       });
     } catch (e) {
-      addLog("ERROR", `${e}`);
+      addTextLog("ERROR", `${e}`);
     }
   };
 
@@ -216,7 +265,7 @@ function App() {
       });
       await invoke("send_data", { data: frame });
     } catch (e) {
-      addLog("ERROR", `${e}`);
+      addTextLog("ERROR", `${e}`);
     }
   }, [status.connected, modbusSlaveId, modbusFunction, modbusRegister, modbusCount, addLog]);
 
@@ -233,6 +282,25 @@ function App() {
 
     return () => window.clearTimeout(timer);
   }, []);
+
+  // U7: 导出终端日志
+  const handleExportLog = useCallback(async () => {
+    if (logs.length === 0) return;
+    try {
+      const { save } = await import("@tauri-apps/plugin-dialog");
+      const { writeTextFile } = await import("@tauri-apps/plugin-fs");
+      const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+      const filePath = await save({
+        defaultPath: `log-${stamp}.txt`,
+        filters: [{ name: "Text", extensions: ["txt", "log"] }],
+      });
+      if (!filePath) return;
+      const content = logs.map((l) => `[${l.timestamp}] ${l.direction} ${l.data}`).join("\n");
+      await writeTextFile(filePath, content);
+    } catch (e) {
+      addTextLog("ERROR", `导出失败: ${e}`);
+    }
+  }, [logs, addLog]);
 
   // 备注：自动发送（通过 ref 读取最新 send 逻辑，避免 interval 随输入重建）
   useEffect(() => {
@@ -265,7 +333,7 @@ function App() {
         <div className="header-left">
           <div className="app-logo-area">
             <h1>OxideSerial</h1>
-            <span className="app-version">v0.1.1</span>
+            <span className="app-version">v{APP_VERSION}</span>
           </div>
           <span className={`status-indicator ${status.connected ? "connected" : ""}`}>
             {status.connected
@@ -388,22 +456,30 @@ function App() {
               <div className="terminal-header">
                 <h3>{t("terminal.title", { defaultValue: "终端" })}</h3>
                 <div className="terminal-controls">
+                  {/* M10: RX/TX 字节计数 */}
+                  {status.connected && (
+                    <span className="byte-stats" style={{ fontSize: 10, color: "var(--text-muted)", fontFamily: "Consolas, monospace" }}>
+                      RX: {(byteStats[0] / 1024).toFixed(1)}K TX: {(byteStats[1] / 1024).toFixed(1)}K
+                    </span>
+                  )}
                   <label><input type="checkbox" checked={showHex} onChange={(e) => setShowHex(e.target.checked)} /> HEX</label>
                   <button onClick={() => setLogs([])}>{t("terminal.clear", { defaultValue: "清空" })}</button>
+                  {/* U7: 导出日志 */}
+                  <button onClick={handleExportLog}>{t("terminal.export", { defaultValue: "导出" })}</button>
                 </div>
               </div>
               <div className="log-container" ref={logContainerRef} role="log" aria-live="polite">
                 {logs.map((log) => (
                   <div key={log.id} className={`log-entry log-${log.direction.toLowerCase()}`}>
                     <span className="log-dir">{log.direction}</span>
-                    <span className="log-data">{log.data}</span>
+                    <span className="log-data">{log.data || (showHex ? log.hex : log.ascii)}</span>
                   </div>
                 ))}
               </div>
               <div className="send-area">
                 <div className="send-controls">
-                  <label><input type="radio" checked={sendMode === "ascii"} onChange={() => setSendMode("ascii")} /> ASCII</label>
-                  <label><input type="radio" checked={sendMode === "hex"} onChange={() => setSendMode("hex")} /> HEX</label>
+                  <label><input type="radio" checked={sendMode === "ascii"} onChange={() => handleSendModeChange("ascii")} /> ASCII</label>
+                  <label><input type="radio" checked={sendMode === "hex"} onChange={() => handleSendModeChange("hex")} /> HEX</label>
                   <label className="auto-send"><input type="checkbox" checked={autoSend} onChange={(e) => setAutoSend(e.target.checked)} /> {t("terminal.autoSend", { defaultValue: "自动" })}</label>
                   <input type="number" min={100} value={autoSendInterval} onChange={(e) => setAutoSendInterval(Number(e.target.value))} className="interval" />
                   <span>ms</span>
@@ -411,7 +487,16 @@ function App() {
                 <div className="send-row">
                   <textarea
                     value={sendData}
-                    onChange={(e) => setSendData(e.target.value)}
+                    onChange={(e) => {
+                      if (sendMode === "hex") {
+                        // HEX 输入自动格式化：每 2 个字符加空格
+                        const raw = e.target.value.replace(/[^0-9a-fA-F]/g, "");
+                        const formatted = raw.replace(/(.{2})/g, "$1 ").trim();
+                        setSendData(formatted);
+                      } else {
+                        setSendData(e.target.value);
+                      }
+                    }}
                     placeholder={sendMode === "hex" ? t("terminal.hexPlaceholder", { defaultValue: "01 03 00 00 00 01" }) : t("terminal.placeholder", { defaultValue: "输入文本" })}
                     onKeyDown={(e) => { if (e.key === "Enter" && e.ctrlKey) { e.preventDefault(); handleSend(); } }}
                   />

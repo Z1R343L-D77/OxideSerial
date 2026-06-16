@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import { applyTheme, watchSystemTheme } from "../utils/theme";
 import type { AppConfig, ThemeOption, ViewMode } from "../types/config";
+import { APP_VERSION } from "../types/config";
 import { enable, disable, isEnabled } from "@tauri-apps/plugin-autostart";
 
 interface SettingsPanelProps {
@@ -10,8 +11,6 @@ interface SettingsPanelProps {
   onChange: (config: AppConfig) => void;
   onClose: () => void;
 }
-
-const VERSION = "0.1.1";
 
 export function SettingsPanel({ config, onChange, onClose }: SettingsPanelProps) {
   const { t, i18n } = useTranslation();
@@ -131,7 +130,7 @@ export function SettingsPanel({ config, onChange, onClose }: SettingsPanelProps)
       <section className="settings-section settings-about">
         <label className="settings-label">{t("settings.about.title", { defaultValue: "关于" })}</label>
         <div className="about-content">
-          <p className="about-name">OxideSerial v{VERSION}</p>
+          <p className="about-name">OxideSerial v{APP_VERSION}</p>
           <p className="about-desc">{t("settings.about.description", { defaultValue: "工业级串口调试器" })}</p>
           <p className="about-tech">{t("settings.about.techStack", { defaultValue: "基于 Tauri + Rust + React 构建" })}</p>
         </div>
