@@ -21,12 +21,6 @@ interface WaveformPanelProps {
   frame: DataFrame | null;
 }
 
-interface CursorInfo {
-  visible: boolean;
-  time: number;
-  values: Array<number | null>;
-}
-
 interface SampleInfo {
   time: number | null;
   values: Array<number | null>;
@@ -80,13 +74,12 @@ export function WaveformPanel({ frame }: WaveformPanelProps) {
   const [channelCount, setChannelCount] = useState(0);
   const [paused, setPaused] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>("auto");
-  const [cursorInfo, setCursorInfo] = useState<CursorInfo>({
-    visible: false,
-    time: 0,
-    values: [],
-  });
+  // 备注：cursorInfo 通过 ref 直接操作 DOM，避免鼠标移动触发 re-render
+  const cursorTextRef = useRef<HTMLSpanElement>(null);
   const [clearedUntilTimestamp, setClearedUntilTimestamp] = useState<number>(0);
   const [hiddenChannels, setHiddenChannels] = useState<Record<number, boolean>>({});
+  const hiddenChannelsRef = useRef(hiddenChannels);
+  useEffect(() => { hiddenChannelsRef.current = hiddenChannels; }, [hiddenChannels]);
 
   const toggleChannelVisibility = useCallback((chIdx: number) => {
     setHiddenChannels((prev) => ({
@@ -96,9 +89,7 @@ export function WaveformPanel({ frame }: WaveformPanelProps) {
   }, []);
 
   // 备注：可调波形参数
-  const [deltaT, setDeltaT] = useState(50);          // △t 采样间隔 ms
   const [bufferLimit, setBufferLimit] = useState(50000); // 缓冲区上限 /ch
-  const [autoPoints, setAutoPoints] = useState(100);   // Auto 点数对齐
 
   const pausedRef = useRef(false);
   const panningRef = useRef(false);
@@ -124,12 +115,28 @@ export function WaveformPanel({ frame }: WaveformPanelProps) {
           values: [],
         };
 
+  // 备注：预分配 Float64Array 池，避免每帧分配新数组
+  const dataPoolRef = useRef<Float64Array[]>([]);
+
   const buildAlignedData = useCallback((): uPlot.AlignedData => {
     const { timestamps, channels } = bufferRef.current;
-    return [
-      new Float64Array(timestamps),
-      ...channels.map((channel) => new Float64Array(channel)),
-    ];
+    const needed = channels.length + 1;
+
+    // 备注：确保池大小正确
+    while (dataPoolRef.current.length < needed) {
+      dataPoolRef.current.push(new Float64Array(0));
+    }
+
+    // 备注：复制时间轴
+    const tsArr = new Float64Array(timestamps);
+    dataPoolRef.current[0] = tsArr;
+
+    // 备注：复制各通道数据
+    for (let i = 0; i < channels.length; i++) {
+      dataPoolRef.current[i + 1] = new Float64Array(channels[i]);
+    }
+
+    return dataPoolRef.current.slice(0, needed);
   }, []);
 
   const renderChart = useCallback((resetScales: boolean) => {
@@ -233,7 +240,17 @@ export function WaveformPanel({ frame }: WaveformPanelProps) {
             (plot) => {
               const { left, top } = plot.cursor;
               if (left == null || top == null || left < 0 || top < 0) {
-                setCursorInfo((prev) => (prev.visible ? { ...prev, visible: false } : prev));
+                // 备注：直接操作 DOM，不触发 re-render
+                if (cursorTextRef.current) {
+                  const { timestamps, channels } = bufferRef.current;
+                  if (timestamps.length > 0) {
+                    const last = timestamps.length - 1;
+                    cursorTextRef.current.textContent =
+                      `${fmtTime(timestamps[last])} | ${channels.map((ch, i) => `CH${i + 1} ${fmtValue(ch[last] ?? null)}`).join("  ")}`;
+                  } else {
+                    cursorTextRef.current.textContent = t("waveform.waiting", { defaultValue: "等待数据..." });
+                  }
+                }
                 return;
               }
 
@@ -241,17 +258,10 @@ export function WaveformPanel({ frame }: WaveformPanelProps) {
               if (timestamps.length === 0) return;
 
               const dataIndex = clampIndex(Math.round(plot.posToIdx(left)), timestamps.length);
-              setCursorInfo({
-                visible: true,
-                time: timestamps[dataIndex],
-                values: channels.map((channel) => channel[dataIndex] ?? null),
-              });
-            },
-          ],
-          setScale: [
-            (plot, key) => {
-              const scale = plot.scales[key];
-              if (scale.min == null || scale.max == null) return;
+              if (cursorTextRef.current) {
+                cursorTextRef.current.textContent =
+                  `T ${fmtTime(timestamps[dataIndex])} | ${channels.map((ch, i) => `CH${i + 1} ${fmtValue(ch[dataIndex] ?? null)}`).join("  ")}`;
+              }
             },
           ],
         },
@@ -293,6 +303,7 @@ export function WaveformPanel({ frame }: WaveformPanelProps) {
         channels: Array.from({ length: numChannels }, () => []),
       };
       setCursorInfo({ visible: false, time: 0, values: [] });
+      setHiddenChannels({}); // P0 #3: 通道数变化时重置隐藏状态
       initChart(numChannels);
     }
 
@@ -433,7 +444,9 @@ export function WaveformPanel({ frame }: WaveformPanelProps) {
       timestamps: [],
       channels: Array.from({ length: channelCount }, () => []),
     };
-    setCursorInfo({ visible: false, time: 0, values: [] });
+    if (cursorTextRef.current) {
+      cursorTextRef.current.textContent = t("waveform.waiting", { defaultValue: "等待数据..." });
+    }
     setClearedUntilTimestamp(frame?.timestamp ?? 0);
     chartRef.current?.setData(
       [new Float64Array(0), ...Array.from({ length: channelCount }, () => new Float64Array(0))],
@@ -526,11 +539,9 @@ export function WaveformPanel({ frame }: WaveformPanelProps) {
     el.style.cursor = "grabbing";
   }, []);
 
-  const cursorText = cursorInfo.visible
-    ? `T ${fmtTime(cursorInfo.time)} | ${cursorInfo.values.map((value, index) => `CH${index + 1} ${fmtValue(value)}`).join("  ")}`
-    : latestSample.time != null
-      ? `Latest ${fmtTime(latestSample.time)} | ${latestSample.values.map((value, index) => `CH${index + 1} ${fmtValue(value)}`).join("  ")}`
-      : t("waveform.waiting", { defaultValue: "等待数据..." });
+  const defaultCursorText = latestSample.time != null
+    ? `Latest ${fmtTime(latestSample.time)} | ${latestSample.values.map((value, index) => `CH${index + 1} ${fmtValue(value)}`).join("  ")}`
+    : t("waveform.waiting", { defaultValue: "等待数据..." });
 
   return (
     <div className="waveform-layout">
@@ -538,7 +549,7 @@ export function WaveformPanel({ frame }: WaveformPanelProps) {
         <div className="waveform-toolbar">
           <span className="waveform-title">{t("waveform.title", { defaultValue: "波形" })}</span>
           <span className="waveform-channels">
-            {channelCount > 0 ? `${channelCount} CH | ${cursorText}` : t("waveform.waiting", { defaultValue: "等待数据..." })}
+            {channelCount > 0 ? <>{channelCount} CH | <span ref={cursorTextRef}>{defaultCursorText}</span></> : t("waveform.waiting", { defaultValue: "等待数据..." })}
           </span>
           <button className={`btn-small ${paused ? "btn-resume" : "btn-pause"}`} onClick={handleTogglePause}>
             {paused ? `▶ ${t("waveform.resume", { defaultValue: "继续" })}` : `⏸ ${t("waveform.pause", { defaultValue: "暂停" })}`}
@@ -556,17 +567,6 @@ export function WaveformPanel({ frame }: WaveformPanelProps) {
         {/* 备注：状态栏 - 可调参数 */}
         <div className="waveform-statusbar">
           <label className="statusbar-item">
-            {t("waveform.deltaT", { defaultValue: "△t" })}:
-            <input
-              type="number"
-              min={1}
-              value={deltaT}
-              onChange={(e) => setDeltaT(Math.max(1, Number(e.target.value)))}
-              className="statusbar-input"
-            />
-            ms
-          </label>
-          <label className="statusbar-item">
             {t("waveform.bufferLimit", { defaultValue: "缓冲区上限" })}:
             <input
               type="number"
@@ -577,16 +577,6 @@ export function WaveformPanel({ frame }: WaveformPanelProps) {
               className="statusbar-input"
             />
             {t("waveform.perChannel", { defaultValue: "/ch" })}
-          </label>
-          <label className="statusbar-item">
-            {t("waveform.autoPoints", { defaultValue: "Auto点数对齐" })}:
-            <input
-              type="number"
-              min={10}
-              value={autoPoints}
-              onChange={(e) => setAutoPoints(Math.max(10, Number(e.target.value)))}
-              className="statusbar-input"
-            />
           </label>
         </div>
       </div>

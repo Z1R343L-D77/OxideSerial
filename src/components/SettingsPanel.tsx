@@ -140,12 +140,19 @@ export function SettingsPanel({ config, onChange, onClose }: SettingsPanelProps)
   );
 }
 
-// 备注：开关行组件
+// 备注：开关行组件（键盘可访问）
 function ToggleRow({ label, checked, onChange }: { label: string; checked: boolean; onChange: (v: boolean) => void }) {
   return (
     <label className="toggle-row">
       <span>{label}</span>
-      <div className={`toggle-switch ${checked ? "on" : ""}`} onClick={() => onChange(!checked)}>
+      <div
+        className={`toggle-switch ${checked ? "on" : ""}`}
+        role="switch"
+        aria-checked={checked}
+        tabIndex={0}
+        onClick={() => onChange(!checked)}
+        onKeyDown={(e) => { if (e.key === " " || e.key === "Enter") { e.preventDefault(); onChange(!checked); } }}
+      >
         <div className="toggle-thumb" />
       </div>
     </label>

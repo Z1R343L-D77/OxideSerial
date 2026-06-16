@@ -4,44 +4,11 @@ import { listen } from "@tauri-apps/api/event";
 import { useTranslation } from "react-i18next";
 import { WaveformPanel } from "./components/WaveformPanel";
 import { SettingsPanel } from "./components/SettingsPanel";
+import type { SerialConfig, SerialStatus, TerminalData, DataFrame, LogEntry } from "./types/serial";
 import type { AppConfig, ViewMode } from "./types/config";
 import { DEFAULT_CONFIG } from "./types/config";
 import { applyTheme, watchSystemTheme } from "./utils/theme";
 import "./App.css";
-
-interface SerialConfig {
-  port_name: string;
-  baud_rate: number;
-  data_bits: number;
-  stop_bits: number;
-  parity: string;
-}
-
-interface SerialStatus {
-  connected: boolean;
-  port_name: string;
-  baud_rate: number;
-}
-
-interface TerminalData {
-  direction: string;
-  hex: string;
-  ascii: string;
-  timestamp: string;
-}
-
-interface DataFrame {
-  timestamp: number;
-  values: number[];
-  raw: string;
-}
-
-interface LogEntry {
-  id: number;
-  timestamp: string;
-  direction: string;
-  data: string;
-}
 
 const BAUD_RATES = [1200, 2400, 4800, 9600, 19200, 38400, 57600, 74800, 115200, 230400, 460800, 500000, 576000, 921600, 1000000, 1152000, 1500000, 2000000, 2500000, 3000000, 3500000, 4000000];
 const DATA_BITS = [5, 6, 7, 8];
@@ -83,10 +50,13 @@ function App() {
   // 备注：收发
   const [sendMode, setSendMode] = useState<"ascii" | "hex">("ascii");
   const [showHex, setShowHex] = useState(false);
+  const showHexRef = useRef(false);
   const [sendData, setSendData] = useState("");
+  const sendDataRef = useRef("");
   const [autoSend, setAutoSend] = useState(false);
   const [autoSendInterval, setAutoSendInterval] = useState(1000);
   const [lineEnding, setLineEnding] = useState<"none" | "LF" | "CR" | "CRLF" | "LFCR">("none");
+  const lineEndingRef = useRef<"none" | "LF" | "CR" | "CRLF" | "LFCR">("none");
   const [sendHistory, setSendHistory] = useState<string[]>([]);
   const [showHistory, setShowHistory] = useState(false);
   const sendHistoryLimit = 20;
@@ -123,11 +93,11 @@ function App() {
     setLogs((prev) => [...prev.slice(-1999), { id, timestamp, direction, data }]);
   }, []);
 
-  // 备注：监听串口数据事件
+  // 备注：监听串口数据事件（showHex 通过 ref 读取，避免重建监听器）
   useEffect(() => {
     const unlisten1 = listen<TerminalData>("serial-data", (event) => {
       const d = event.payload;
-      const display = showHex ? d.hex : d.ascii;
+      const display = showHexRef.current ? d.hex : d.ascii;
       addLog(d.direction, `[${d.timestamp}] ${display}`);
     });
 
@@ -139,7 +109,7 @@ function App() {
       void unlisten1.then((fn) => fn());
       void unlisten2.then((fn) => fn());
     };
-  }, [showHex, addLog]);
+  }, [addLog]);
 
   // 备注：刷新串口列表
   const refreshPorts = useCallback(async () => {
@@ -175,13 +145,28 @@ function App() {
     }
   }, [status.connected, serialConfig, addLog, t]);
 
-  // 备注：发送数据
-  const handleSend = useCallback(async () => {
-    if (!status.connected || !sendData.trim()) return;
+  // 备注：同步 refs（用于事件回调中读取最新值，避免重建监听器）
+  useEffect(() => { showHexRef.current = showHex; }, [showHex]);
+  useEffect(() => { sendDataRef.current = sendData; }, [sendData]);
+  useEffect(() => { lineEndingRef.current = lineEnding; }, [lineEnding]);
+
+  // 备注：发送数据（通过 ref 读取最新值，保证 auto-send interval 稳定）
+  const handleSendRef = useRef<() => Promise<void>>(async () => {});
+  const statusRef = useRef(status);
+  useEffect(() => { statusRef.current = status; }, [status]);
+  const sendModeRef = useRef(sendMode);
+  useEffect(() => { sendModeRef.current = sendMode; }, [sendMode]);
+
+  handleSendRef.current = async () => {
+    const currentStatus = statusRef.current;
+    const currentSendData = sendDataRef.current;
+    const currentSendMode = sendModeRef.current;
+    const currentLineEnding = lineEndingRef.current;
+    if (!currentStatus.connected || !currentSendData.trim()) return;
     try {
       let bytes: number[];
-      if (sendMode === "hex") {
-        const hexStr = sendData.replace(/\s+/g, "");
+      if (currentSendMode === "hex") {
+        const hexStr = currentSendData.replace(/\s+/g, "");
         if (hexStr.length % 2 !== 0) {
           addLog("ERROR", "HEX");
           return;
@@ -191,10 +176,9 @@ function App() {
           bytes.push(parseInt(hexStr.substring(i, i + 2), 16));
         }
       } else {
-        bytes = Array.from(new TextEncoder().encode(sendData));
+        bytes = Array.from(new TextEncoder().encode(currentSendData));
       }
 
-      // 备注：追加行尾
       const lineEndingBytes: Record<string, number[]> = {
         none: [],
         LF: [0x0A],
@@ -202,22 +186,23 @@ function App() {
         CRLF: [0x0D, 0x0A],
         LFCR: [0x0A, 0x0D],
       };
-      const extra = lineEndingBytes[lineEnding] ?? [];
+      const extra = lineEndingBytes[currentLineEnding] ?? [];
       if (extra.length > 0) {
         bytes = [...bytes, ...extra];
       }
 
       await invoke("send_data", { data: bytes });
 
-      // 备注：保存到发送历史
       setSendHistory((prev) => {
-        const filtered = prev.filter((item) => item !== sendData);
-        return [sendData, ...filtered].slice(0, sendHistoryLimit);
+        const filtered = prev.filter((item) => item !== currentSendData);
+        return [currentSendData, ...filtered].slice(0, sendHistoryLimit);
       });
     } catch (e) {
       addLog("ERROR", `${e}`);
     }
-  }, [status.connected, sendData, sendMode, lineEnding, addLog]);
+  };
+
+  const handleSend = useCallback(() => { void handleSendRef.current(); }, []);
 
   // 备注：Modbus 发送
   const handleModbusSend = useCallback(async () => {
@@ -249,10 +234,12 @@ function App() {
     return () => window.clearTimeout(timer);
   }, []);
 
-  // 备注：自动发送
+  // 备注：自动发送（通过 ref 读取最新 send 逻辑，避免 interval 随输入重建）
   useEffect(() => {
     if (autoSend && status.connected) {
-      autoSendTimerRef.current = window.setInterval(handleSend, autoSendInterval);
+      autoSendTimerRef.current = window.setInterval(() => {
+        void handleSendRef.current();
+      }, autoSendInterval);
     } else {
       if (autoSendTimerRef.current) {
         clearInterval(autoSendTimerRef.current);
@@ -262,7 +249,7 @@ function App() {
     return () => {
       if (autoSendTimerRef.current) clearInterval(autoSendTimerRef.current);
     };
-  }, [autoSend, status.connected, autoSendInterval, handleSend]);
+  }, [autoSend, status.connected, autoSendInterval]);
 
   // 备注：自动滚动日志
   useEffect(() => {
@@ -287,18 +274,18 @@ function App() {
           </span>
         </div>
         <div className="header-right">
-          <div className="view-tabs">
-            <button className={viewMode === "terminal" ? "active" : ""} onClick={() => setViewMode("terminal")}>
+          <div className="view-tabs" role="tablist">
+            <button role="tab" aria-selected={viewMode === "terminal"} className={viewMode === "terminal" ? "active" : ""} onClick={() => setViewMode("terminal")}>
               {t("settings.view.terminal", { defaultValue: "终端" })}
             </button>
-            <button className={viewMode === "waveform" ? "active" : ""} onClick={() => setViewMode("waveform")}>
+            <button role="tab" aria-selected={viewMode === "waveform"} className={viewMode === "waveform" ? "active" : ""} onClick={() => setViewMode("waveform")}>
               {t("settings.view.waveform", { defaultValue: "波形" })}
             </button>
-            <button className={viewMode === "split" ? "active" : ""} onClick={() => setViewMode("split")}>
+            <button role="tab" aria-selected={viewMode === "split"} className={viewMode === "split" ? "active" : ""} onClick={() => setViewMode("split")}>
               {t("settings.view.split", { defaultValue: "分屏" })}
             </button>
           </div>
-          <button className="btn-settings" onClick={() => setSettingsOpen(!settingsOpen)} title={t("settings.title", { defaultValue: "设置" })}>
+          <button className="btn-settings" onClick={() => setSettingsOpen(!settingsOpen)} aria-label={t("settings.title", { defaultValue: "设置" })}>
             ⚙
           </button>
         </div>
@@ -308,7 +295,7 @@ function App() {
         {/* 备注：设置面板 */}
         {settingsOpen && (
           <>
-            <div className="settings-backdrop" onClick={() => setSettingsOpen(false)} />
+            <div className="settings-backdrop" onClick={() => setSettingsOpen(false)} role="presentation" />
             <SettingsPanel config={config} onChange={handleSettingsChange} onClose={() => setSettingsOpen(false)} />
           </>
         )}
@@ -405,7 +392,7 @@ function App() {
                   <button onClick={() => setLogs([])}>{t("terminal.clear", { defaultValue: "清空" })}</button>
                 </div>
               </div>
-              <div className="log-container" ref={logContainerRef}>
+              <div className="log-container" ref={logContainerRef} role="log" aria-live="polite">
                 {logs.map((log) => (
                   <div key={log.id} className={`log-entry log-${log.direction.toLowerCase()}`}>
                     <span className="log-dir">{log.direction}</span>

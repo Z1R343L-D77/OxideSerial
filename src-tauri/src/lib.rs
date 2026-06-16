@@ -257,26 +257,24 @@ fn parse_data_line(line: &str, start_time: Instant) -> Option<DataFrame> {
 
 // 备注：获取本地时间 HH:MM:SS.mmm
 fn chrono_now() -> String {
-    let now = std::time::SystemTime::now();
-    let duration = now
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default();
-    let total_ms = duration.as_millis();
-
-    // 备注：计算本地时间偏移（UTC+8 等）
-    // 使用 time crate 获取本地 UTC 偏移
-    let offset_secs = match time::OffsetDateTime::now_local() {
-        Ok(dt) => dt.offset().whole_seconds() as i128,
-        Err(_) => 0, // 回退到 UTC
-    };
-
-    let local_ms = (total_ms as i128 + offset_secs as i128 * 1000).max(0) as u128;
-    let total_secs = (local_ms / 1000) % 86400;
-    let hours = total_secs / 3600;
-    let minutes = (total_secs % 3600) / 60;
-    let seconds = total_secs % 60;
-    let millis = local_ms % 1000;
-    format!("{:02}:{:02}:{:02}.{:03}", hours, minutes, seconds, millis)
+    match time::OffsetDateTime::now_local() {
+        Ok(dt) => format!("{:02}:{:02}:{:02}.{:03}", dt.hour(), dt.minute(), dt.second(), dt.millisecond()),
+        Err(_) => {
+            // 备注：回退到 UTC
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default();
+            let ms = now.as_millis();
+            let total_secs = (ms / 1000) % 86400;
+            format!(
+                "{:02}:{:02}:{:02}.{:03}",
+                total_secs / 3600,
+                (total_secs % 3600) / 60,
+                total_secs % 60,
+                ms % 1000
+            )
+        }
+    }
 }
 
 #[tauri::command]

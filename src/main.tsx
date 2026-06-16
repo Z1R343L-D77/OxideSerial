@@ -2,7 +2,6 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { initI18n } from './locales'
 import { applyTheme, watchSystemTheme } from './utils/theme'
-import './index.css'
 import App from './App.tsx'
 
 // 备注：初始化 i18n 和主题
