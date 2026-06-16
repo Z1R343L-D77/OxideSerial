@@ -1209,3 +1209,35 @@ input[type="radio"] {
   font-family: "Consolas", monospace;
   text-align: right;
 }
+
+/* ========== 悬浮提示框 (Tooltip) ========== */
+.waveform-tooltip {
+  background: rgba(30, 29, 28, 0.85);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-family: "Consolas", monospace;
+  font-size: 11px;
+  color: var(--text-primary);
+  box-shadow: var(--shadow-md);
+  pointer-events: none;
+  transition: opacity 0.1s var(--ease-out);
+}
+
+[data-theme="light"] .waveform-tooltip {
+  background: rgba(246, 243, 236, 0.9);
+  border-color: var(--border);
+  color: var(--text-primary);
+}
+
+.waveform-tooltip .tooltip-ch {
+  font-weight: 700;
+  margin-bottom: 2px;
+}
+
+.waveform-tooltip .tooltip-coord {
+  font-size: 10px;
+  color: var(--text-secondary);
+}

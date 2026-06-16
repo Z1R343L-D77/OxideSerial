@@ -76,6 +76,7 @@ export function WaveformPanel({ frame }: WaveformPanelProps) {
   const [viewMode, setViewMode] = useState<ViewMode>("auto");
   // 备注：cursorInfo 通过 ref 直接操作 DOM，避免鼠标移动触发 re-render
   const cursorTextRef = useRef<HTMLSpanElement>(null);
+  const tooltipRef = useRef<HTMLDivElement>(null);
   const [clearedUntilTimestamp, setClearedUntilTimestamp] = useState<number>(0);
   const [hiddenChannels, setHiddenChannels] = useState<Record<number, boolean>>({});
   const hiddenChannelsRef = useRef(hiddenChannels);
@@ -95,6 +96,10 @@ export function WaveformPanel({ frame }: WaveformPanelProps) {
   const panningRef = useRef(false);
   const viewModeRef = useRef<ViewMode>("auto");
   const panStateRef = useRef<PanState | null>(null);
+
+  // 备注：可调波形参数
+  const [deltaT, setDeltaT] = useState(50);
+  const [autoPoints, setAutoPoints] = useState(100);
 
   const bufferRef = useRef<{ timestamps: number[]; channels: number[][] }>({
     timestamps: [],
@@ -143,8 +148,16 @@ export function WaveformPanel({ frame }: WaveformPanelProps) {
     const chart = chartRef.current;
     if (!chart || bufferRef.current.channels.length === 0) return;
 
-    chart.setData(buildAlignedData(), resetScales);
-  }, [buildAlignedData]);
+    const data = buildAlignedData();
+    chart.setData(data, resetScales);
+
+    // 备注：autoPoints 生效 — Auto 模式下只显示最后 N 个点
+    if (viewModeRef.current === "auto" && data[0].length > autoPoints) {
+      const xMax = data[0][data[0].length - 1];
+      const xMin = data[0][data[0].length - autoPoints];
+      chart.setScale("x", { min: xMin, max: xMax });
+    }
+  }, [buildAlignedData, autoPoints]);
 
   const resetToLatest = useCallback(() => {
     viewModeRef.current = "auto";
@@ -241,6 +254,9 @@ export function WaveformPanel({ frame }: WaveformPanelProps) {
               const { left, top } = plot.cursor;
               if (left == null || top == null || left < 0 || top < 0) {
                 // 备注：直接操作 DOM，不触发 re-render
+                if (tooltipRef.current) {
+                  tooltipRef.current.style.display = "none";
+                }
                 if (cursorTextRef.current) {
                   const { timestamps, channels } = bufferRef.current;
                   if (timestamps.length > 0) {
@@ -258,9 +274,69 @@ export function WaveformPanel({ frame }: WaveformPanelProps) {
               if (timestamps.length === 0) return;
 
               const dataIndex = clampIndex(Math.round(plot.posToIdx(left)), timestamps.length);
+
+              // 计算 y 轴方向上距离鼠标最近的可见通道
+              let minDistance = Number.POSITIVE_INFINITY;
+              let closestChIdx = -1;
+
+              for (let i = 0; i < channels.length; i++) {
+                if (hiddenChannelsRef.current[i]) continue;
+                const val = channels[i][dataIndex];
+                if (val === undefined || val === null || Number.isNaN(val)) continue;
+
+                const yPos = plot.valToPos(val, "y");
+                if (yPos != null) {
+                  const dist = Math.abs(top - yPos);
+                  if (dist < minDistance) {
+                    minDistance = dist;
+                    closestChIdx = i;
+                  }
+                }
+              }
+
+              // 准备最近通道的文本信息
+              let closestText = "";
+              let closestHtml = "";
+              let chColor = "";
+              if (closestChIdx !== -1) {
+                const val = channels[closestChIdx][dataIndex] ?? null;
+                chColor = CHANNEL_COLORS[closestChIdx % CHANNEL_COLORS.length];
+                closestText = `最近: CH${closestChIdx + 1} (X: ${fmtTime(timestamps[dataIndex])}, Y: ${fmtValue(val)}) | `;
+                closestHtml = `
+                  <div class="tooltip-ch" style="color: ${chColor}">CH${closestChIdx + 1}</div>
+                  <div class="tooltip-coord">X: ${fmtTime(timestamps[dataIndex])}</div>
+                  <div class="tooltip-coord">Y: ${fmtValue(val)}</div>
+                `;
+              }
+
+              // 更新顶部文本
               if (cursorTextRef.current) {
                 cursorTextRef.current.textContent =
-                  `T ${fmtTime(timestamps[dataIndex])} | ${channels.map((ch, i) => `CH${i + 1} ${fmtValue(ch[dataIndex] ?? null)}`).join("  ")}`;
+                  `${closestText}T ${fmtTime(timestamps[dataIndex])} | ${channels.map((ch, i) => `CH${i + 1} ${fmtValue(ch[dataIndex] ?? null)}`).join("  ")}`;
+              }
+
+              // 更新并显示 HTML 悬浮框 tooltip
+              const el = containerRef.current;
+              if (tooltipRef.current && el && closestChIdx !== -1) {
+                let tooltipX = left + plot.bbox.left + 15;
+                let tooltipY = top + plot.bbox.top + 15;
+                const containerWidth = el.clientWidth;
+                const containerHeight = el.clientHeight;
+
+                // 边界检测，防溢出
+                if (tooltipX + 130 > containerWidth) {
+                  tooltipX = left + plot.bbox.left - 145;
+                }
+                if (tooltipY + 70 > containerHeight) {
+                  tooltipY = top + plot.bbox.top - 75;
+                }
+
+                tooltipRef.current.style.display = "block";
+                tooltipRef.current.style.left = `${tooltipX}px`;
+                tooltipRef.current.style.top = `${tooltipY}px`;
+                tooltipRef.current.innerHTML = closestHtml;
+              } else if (tooltipRef.current) {
+                tooltipRef.current.style.display = "none";
               }
             },
           ],
@@ -302,7 +378,6 @@ export function WaveformPanel({ frame }: WaveformPanelProps) {
         timestamps: [],
         channels: Array.from({ length: numChannels }, () => []),
       };
-      setCursorInfo({ visible: false, time: 0, values: [] });
       setHiddenChannels({}); // P0 #3: 通道数变化时重置隐藏状态
       initChart(numChannels);
     }
@@ -563,9 +638,25 @@ export function WaveformPanel({ frame }: WaveformPanelProps) {
           ref={containerRef}
           onMouseDown={handleMouseDown}
           onWheel={handleWheel}
-        />
+        >
+          <div ref={tooltipRef} className="waveform-tooltip" style={{ display: "none", position: "absolute", pointerEvents: "none", zIndex: 10 }} />
+        </div>
         {/* 备注：状态栏 - 可调参数 */}
         <div className="waveform-statusbar">
+          <label className="statusbar-item">
+            {t("waveform.deltaT", { defaultValue: "△t" })}:
+            <input
+              type="number"
+              min={1}
+              value={deltaT}
+              onChange={(e) => setDeltaT(Math.max(1, Number(e.target.value)))}
+              className="statusbar-input"
+            />
+            ms
+            <span style={{ color: "var(--text-muted)", marginLeft: 4 }}>
+              ({(1000 / deltaT).toFixed(1)} Hz)
+            </span>
+          </label>
           <label className="statusbar-item">
             {t("waveform.bufferLimit", { defaultValue: "缓冲区上限" })}:
             <input
@@ -577,6 +668,16 @@ export function WaveformPanel({ frame }: WaveformPanelProps) {
               className="statusbar-input"
             />
             {t("waveform.perChannel", { defaultValue: "/ch" })}
+          </label>
+          <label className="statusbar-item">
+            {t("waveform.autoPoints", { defaultValue: "Auto点数对齐" })}:
+            <input
+              type="number"
+              min={10}
+              value={autoPoints}
+              onChange={(e) => setAutoPoints(Math.max(10, Number(e.target.value)))}
+              className="statusbar-input"
+            />
           </label>
         </div>
       </div>
