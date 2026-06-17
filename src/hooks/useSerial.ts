@@ -12,7 +12,7 @@ export function useSerial(
   const { t } = useTranslation();
 
   // 备注：通过 ref 读取回调，避免 locale 变化重建事件监听器
-  const addLogRef = useRef(addLog);
+  const addLogRef = useRef<(direction: string, hex: string, ascii: string, timestamp?: string) => void>(addLog);
   const addTextLogRef = useRef(addTextLog);
   const onWaveformFrameRef = useRef(onWaveformFrame);
   useEffect(() => { addLogRef.current = addLog; }, [addLog]);
