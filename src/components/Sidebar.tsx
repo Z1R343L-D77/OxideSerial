@@ -139,7 +139,7 @@ export function Sidebar({
   };
 
   const handleClearAll = () => {
-    if (setRegisters && window.confirm("确定要清空所有寄存器监控行吗？")) {
+    if (setRegisters && window.confirm(t("serial.confirmClear", { defaultValue: "确定要清空所有寄存器监控行吗？" }))) {
       setRegisters([]);
     }
   };
@@ -172,7 +172,7 @@ export function Sidebar({
                     fontWeight: 600,
                   }}
                 >
-                  {showHelp ? "收起说明" : "查看说明 ?"}
+                  {showHelp ? t("serial.collapseHelp", { defaultValue: "收起说明" }) : t("serial.showHelp", { defaultValue: "查看说明 ?" })}
                 </button>
               </div>
               <select
@@ -351,7 +351,7 @@ printf("1.1, 3.2, -0.6, -0.9\\n")`}
                 marginTop: "10px",
               }}
             >
-              {isPolling ? "停止轮询" : "开始轮询"}
+              {isPolling ? t("modbus.stopPoll", { defaultValue: "停止轮询" }) : t("modbus.startPoll", { defaultValue: "开始轮询" })}
             </button>
           </section>
 
@@ -362,7 +362,7 @@ printf("1.1, 3.2, -0.6, -0.9\\n")`}
               <label>{t("modbus.regName", { defaultValue: "寄存器别名" })}</label>
               <input
                 type="text"
-                placeholder="例如: 电机转速"
+                placeholder={t("modbus.regPlaceholder", { defaultValue: "例如: 电机转速" })}
                 value={newRegName}
                 onChange={(e) => setNewRegName(e.target.value)}
               />

@@ -144,7 +144,7 @@ export function TerminalPanel({ logs, logContainerRef, status, byteStats, onAddT
             onChange={(e) => setEncoding(e.target.value as "utf-8" | "gbk")} 
             className="line-ending-select" 
             style={{ height: "24px", padding: "0 6px", fontSize: "10px", width: "auto" }}
-            title="终端解码字符集"
+            title={t("terminal.encodingTitle", { defaultValue: "终端解码字符集" })}
           >
             <option value="utf-8">UTF-8</option>
             <option value="gbk">GBK (GB2312)</option>

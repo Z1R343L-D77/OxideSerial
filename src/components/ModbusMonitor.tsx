@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { useTranslation } from "react-i18next";
 import type { ModbusRegister, ByteOrderOption } from "../types/modbus";
 
 interface ModbusMonitorProps {
@@ -22,6 +23,7 @@ export function ModbusMonitor({
   connected,
   onAddTextLog,
 }: ModbusMonitorProps) {
+  const { t } = useTranslation();
   // References for polling queue state machine
   const registersRef = useRef<ModbusRegister[]>(registers);
   const activeIndex = useRef(0);
@@ -113,7 +115,7 @@ export function ModbusMonitor({
 
   const handleTimeout = (reg: ModbusRegister) => {
     if (currentRegister.current?.id === reg.id) {
-      updateRegisterStatus(reg.id, "error", "超时无应答");
+      updateRegisterStatus(reg.id, "error", t("modbus.timeout", { defaultValue: "超时无应答" }));
       onAddTextLog("ERROR", `Modbus 超时: 从站 ${reg.slaveId}, 地址 ${reg.address}`);
       currentRegister.current = null;
       triggerNextPoll();
@@ -201,11 +203,11 @@ export function ModbusMonitor({
 
         try {
           const res = await invoke<any>("parse_modbus_rtu", { data: frame });
-          const errCode = res.exception_code ? `0x${res.exception_code.toString(16).toUpperCase()}` : "未知";
+          const errCode = res.exception_code ? `0x${res.exception_code.toString(16).toUpperCase()}` : t("modbus.unknown", { defaultValue: "未知" });
           updateRegisterStatus(reg.id, "error", `异常码: ${errCode}`);
           onAddTextLog("ERROR", `从站 ${slaveId} 返回异常: ${errCode} (地址 ${reg.address})`);
         } catch {
-          updateRegisterStatus(reg.id, "error", "解析错误");
+          updateRegisterStatus(reg.id, "error", t("modbus.parseError", { defaultValue: "解析错误" }));
         }
         triggerNextPoll();
       }
@@ -258,7 +260,7 @@ export function ModbusMonitor({
 
     const dataBytes = prepareWriteData(writeValue, reg.dataType, byteOrder);
     if (!dataBytes) {
-      alert("输入格式错误，请检查对应数据类型！");
+      alert(t("modbus.inputError", { defaultValue: "输入格式错误，请检查对应数据类型！" }));
       return;
     }
 
@@ -301,7 +303,7 @@ export function ModbusMonitor({
           if (!resolved) {
             resolved = true;
             void unlistenPromise.then((fn) => fn());
-            reject(new Error("写入超时无响应"));
+            reject(new Error(t("modbus.writeTimeout", { defaultValue: "写入超时无响应" })));
           }
         }, 600);
       });
@@ -383,13 +385,13 @@ export function ModbusMonitor({
     <div className="modbus-monitor-card">
       <div className="modbus-monitor-header">
         <div className="modbus-monitor-title">
-          <span>Modbus M表监测</span>
-          {isPolling && <span className="polling-pulse-dot" title="活跃轮询中" />}
+          <span>{t("modbus.monitorTitle", { defaultValue: "Modbus M表监测" })}</span>
+          {isPolling && <span className="polling-pulse-dot" title={t("modbus.activePolling", { defaultValue: "活跃轮询中" })} />}
         </div>
         <div className="modbus-monitor-status-box">
-          连接状态:{" "}
+          {t("modbus.connStatus", { defaultValue: "连接状态" })}:{" "}
           <span className={`status-text ${connected ? "online" : "offline"}`}>
-            {connected ? "已连接" : "断开"}
+            {connected ? t("modbus.connected", { defaultValue: "已连接" }) : t("modbus.disconnected", { defaultValue: "断开" })}
           </span>
         </div>
       </div>
@@ -457,7 +459,7 @@ export function ModbusMonitor({
                         <span
                           className="editable-cell-text"
                           onDoubleClick={() => !isPolling && startEditField(r.id, "name", r.name)}
-                          title={isPolling ? "" : "双击修改名称"}
+                          title={isPolling ? "" : t("modbus.dblClickName", { defaultValue: "双击修改名称" })}
                         >
                           {r.name}
                         </span>
@@ -486,7 +488,7 @@ export function ModbusMonitor({
                         <span
                           className="editable-cell-text monospace"
                           onDoubleClick={() => !isPolling && startEditField(r.id, "address", r.address)}
-                          title={isPolling ? "" : "双击修改地址"}
+                          title={isPolling ? "" : t("modbus.dblClickAddr", { defaultValue: "双击修改地址" })}
                         >
                           {r.address}
                         </span>
@@ -516,7 +518,7 @@ export function ModbusMonitor({
                           }`}
                         />
                         <span className="status-label">
-                          {isPollingRow ? "轮询中" : isSuccessRow ? "正常" : isErrorRow ? "异常" : "等待"}
+                          {isPollingRow ? t("modbus.statusPolling", { defaultValue: "轮询中" }) : isSuccessRow ? t("modbus.statusNormal", { defaultValue: "正常" }) : isErrorRow ? t("modbus.statusError", { defaultValue: "异常" }) : t("modbus.statusWaiting", { defaultValue: "等待" })}
                         </span>
                       </div>
                     </td>
@@ -536,17 +538,17 @@ export function ModbusMonitor({
                             setWriteValue(r.dataType === "bool" ? "ON" : "");
                           }}
                           disabled={!connected}
-                          title={connected ? "写入此寄存器" : "串口未连接，无法写入"}
+                          title={connected ? t("modbus.writeRegister", { defaultValue: "写入此寄存器" }) : t("modbus.writeDisabled", { defaultValue: "串口未连接，无法写入" })}
                         >
-                          写入
+                          {t("modbus.write", { defaultValue: "写入" })}
                         </button>
                         <button
                           className="btn-row-action delete"
                           onClick={() => handleDeleteRegister(r.id)}
                           disabled={isPolling}
-                          title="删除监控行"
+                          title={t("modbus.deleteRow", { defaultValue: "删除监控行" })}
                         >
-                          删除
+                          {t("modbus.delete", { defaultValue: "删除" })}
                         </button>
                       </div>
                     </td>

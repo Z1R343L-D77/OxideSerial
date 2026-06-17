@@ -191,7 +191,7 @@ function App() {
           <button
             className={`function-nav-item ${activeFunction === "serial" ? "active" : ""}`}
             onClick={() => setActiveFunction("serial")}
-            title="串口与协议"
+            title={t("serial.protocolTab", { defaultValue: "串口与协议" })}
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M4 6h16l-2 12H6L4 6z" />

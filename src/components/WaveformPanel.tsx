@@ -737,7 +737,7 @@ export function WaveformPanel({ frame }: WaveformPanelProps) {
                 <button
                   className="btn-visibility"
                   onClick={() => toggleChannelVisibility(index)}
-                  title={isHidden ? "显示通道" : "屏蔽通道"}
+                  title={isHidden ? t("waveform.showChannel", { defaultValue: "显示通道" }) : t("waveform.hideChannel", { defaultValue: "屏蔽通道" })}
                 >
                   {isHidden ? (
                     <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
