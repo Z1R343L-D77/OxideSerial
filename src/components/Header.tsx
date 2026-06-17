@@ -1,5 +1,6 @@
 import { useTranslation } from "react-i18next";
-import type { SerialStatus, ViewMode } from "../types/config";
+import type { ViewMode } from "../types/config";
+import type { SerialStatus } from "../types/serial";
 import { APP_VERSION } from "../types/config";
 
 interface HeaderProps {
@@ -10,7 +11,7 @@ interface HeaderProps {
   onToggleSettings: () => void;
 }
 
-export function Header({ status, viewMode, settingsOpen, onViewModeChange, onToggleSettings }: HeaderProps) {
+export function Header({ status, viewMode, onViewModeChange, onToggleSettings }: HeaderProps) {
   const { t } = useTranslation();
 
   return (

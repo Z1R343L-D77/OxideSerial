@@ -11,6 +11,14 @@ export function useSerial(
 ) {
   const { t } = useTranslation();
 
+  // 备注：通过 ref 读取回调，避免 locale 变化重建事件监听器
+  const addLogRef = useRef(addLog);
+  const addTextLogRef = useRef(addTextLog);
+  const onWaveformFrameRef = useRef(onWaveformFrame);
+  useEffect(() => { addLogRef.current = addLog; }, [addLog]);
+  useEffect(() => { addTextLogRef.current = addTextLog; }, [addTextLog]);
+  useEffect(() => { onWaveformFrameRef.current = onWaveformFrame; }, [onWaveformFrame]);
+
   const [ports, setPorts] = useState<string[]>([]);
   const [serialConfig, setSerialConfig] = useState<SerialConfig>({
     port_name: "",
@@ -18,6 +26,7 @@ export function useSerial(
     data_bits: 8,
     stop_bits: 1,
     parity: "none",
+    protocol: "FireWater",
   });
   const [status, setStatus] = useState<SerialStatus>({
     connected: false,
@@ -26,22 +35,30 @@ export function useSerial(
   });
   const [byteStats, setByteStats] = useState<[number, number]>([0, 0]);
 
-  // 备注：监听串口数据事件
+  // 监听 protocol 变更以同步到后端（支持动态切换协议）
+  useEffect(() => {
+    if (status.connected) {
+      invoke("set_protocol", { protocol: serialConfig.protocol })
+        .catch((e) => addTextLog("ERROR", `同步协议至后端失败: ${e}`));
+    }
+  }, [serialConfig.protocol, status.connected, addTextLog]);
+
+  // 备注：监听串口数据事件（通过 ref 读取回调，不随 locale 重建）
   useEffect(() => {
     const unlisten1 = listen<TerminalData>("serial-data", (event) => {
       const d = event.payload;
-      addLog(d.direction, `[${d.timestamp}] ${d.hex}`, `[${d.timestamp}] ${d.ascii}`);
+      addLogRef.current(d.direction, d.hex, d.ascii, d.timestamp);
     });
 
     const unlisten2 = listen<DataFrame>("waveform-data", (event) => {
-      onWaveformFrame(event.payload);
+      onWaveformFrameRef.current(event.payload);
     });
 
     // R1: 串口断开检测
     const unlisten3 = listen<string>("serial-error", (event) => {
-      addTextLog("ERROR", `串口错误: ${event.payload}`);
+      addTextLogRef.current("ERROR", `串口错误: ${event.payload}`);
       setStatus({ connected: false, port_name: "", baud_rate: 0 });
-      void invoke("close_port").catch(() => {});
+      void invoke("close_port").catch(() => { });
     });
 
     return () => {
@@ -49,7 +66,7 @@ export function useSerial(
       void unlisten2.then((fn) => fn());
       void unlisten3.then((fn) => fn());
     };
-  }, [addLog, addTextLog, onWaveformFrame]);
+  }, []);
 
   // M10: 定时轮询 RX/TX 字节统计
   useEffect(() => {
@@ -58,7 +75,7 @@ export function useSerial(
       return;
     }
     const timer = setInterval(() => {
-      invoke<[number, number]>("get_byte_stats").then(setByteStats).catch(() => {});
+      invoke<[number, number]>("get_byte_stats").then(setByteStats).catch(() => { });
     }, 500);
     return () => clearInterval(timer);
   }, [status.connected]);

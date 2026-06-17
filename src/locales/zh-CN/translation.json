@@ -58,6 +58,8 @@
     "placeholder": "输入文本",
     "hexPlaceholder": "01 03 00 00 00 01",
     "export": "导出",
+    "showTimestamp": "时间戳",
+    "encoding": "编码",
     "clearInput": "清空输入",
     "history": "发送记录",
     "lineEnding": "行尾追加",

@@ -6,6 +6,7 @@ export interface SerialConfig {
   data_bits: number;
   stop_bits: number;
   parity: string;
+  protocol: string;
 }
 
 export interface SerialStatus {

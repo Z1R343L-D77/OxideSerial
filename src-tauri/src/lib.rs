@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use serialport::SerialPort;
+extern crate encoding_rs;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
@@ -16,6 +17,7 @@ pub struct SerialConfig {
     pub data_bits: u8,
     pub stop_bits: u8,
     pub parity: String,
+    pub protocol: String,
 }
 
 impl Default for SerialConfig {
@@ -26,6 +28,7 @@ impl Default for SerialConfig {
             data_bits: 8,
             stop_bits: 1,
             parity: "none".into(),
+            protocol: "FireWater".into(),
         }
     }
 }
@@ -142,9 +145,11 @@ fn open_port(
     let running_arc = Arc::clone(&state.running);
     let start_time = state.start_time;
     let rx_counter = Arc::clone(&state.rx_bytes);
+    let config_arc = Arc::clone(&state.config);
 
     let handle = std::thread::spawn(move || {
         let mut line_buf = String::new();
+        let mut raw_buf = Vec::<u8>::new();
         let mut byte_buf = [0u8; 4096];
         const MAX_LINE_LEN: usize = 65536; // R5: line_buf 最大 64KB
 
@@ -202,20 +207,55 @@ fn open_port(
                     };
                     let _ = app.emit("serial-data", &terminal_data);
 
-                    // 备注：解析数值行用于波形
-                    line_buf.push_str(&ascii_str);
+                    // 获取当前协议
+                    let protocol = {
+                        match config_arc.lock() {
+                            Ok(guard) => guard.protocol.clone(),
+                            Err(_) => "FireWater".to_string(),
+                        }
+                    };
 
-                    // R5: line_buf 长度限制
-                    if line_buf.len() > MAX_LINE_LEN {
-                        line_buf.clear();
-                    }
+                    if protocol == "JustFloat" {
+                        raw_buf.extend_from_slice(&data);
+                        if raw_buf.len() > 65536 {
+                            raw_buf.clear();
+                        }
+                        let tail = [0x00, 0x00, 0x80, 0x7f];
+                        while let Some(pos) = find_subsequence(&raw_buf, &tail) {
+                            let frame_bytes = &raw_buf[..pos];
+                            if frame_bytes.len() > 0 && frame_bytes.len() % 4 == 0 {
+                                let mut values = Vec::new();
+                                for chunk in frame_bytes.chunks_exact(4) {
+                                    let val = f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
+                                    values.push(val as f64);
+                                }
+                                if !values.is_empty() {
+                                    let frame = DataFrame {
+                                        timestamp: start_time.elapsed().as_secs_f64(),
+                                        values,
+                                        raw: format!("JustFloat Frame: {} channels", frame_bytes.len() / 4),
+                                    };
+                                    let _ = app.emit("waveform-data", &frame);
+                                }
+                            }
+                            raw_buf.drain(..pos + 4);
+                        }
+                    } else if protocol == "FireWater" {
+                        // 备注：解析数值行用于波形
+                        line_buf.push_str(&ascii_str);
 
-                    while let Some(pos) = line_buf.find('\n') {
-                        let line = line_buf[..pos].trim().to_string();
-                        line_buf = line_buf[pos + 1..].to_string();
-                        if !line.is_empty() {
-                            if let Some(frame) = parse_data_line(&line, start_time) {
-                                let _ = app.emit("waveform-data", &frame);
+                        // R5: line_buf 长度限制
+                        if line_buf.len() > MAX_LINE_LEN {
+                            line_buf.clear();
+                        }
+
+                        while let Some(pos) = line_buf.find('\n') {
+                            let line = line_buf[..pos].trim().to_string();
+                            line_buf = line_buf[pos + 1..].to_string();
+                            if !line.is_empty() {
+                                if let Some(frame) = parse_data_line(&line, start_time) {
+                                    let _ = app.emit("waveform-data", &frame);
+                                }
                             }
                         }
                     }
@@ -274,6 +314,10 @@ fn parse_data_line(line: &str, start_time: Instant) -> Option<DataFrame> {
         values,
         raw: line.to_string(),
     })
+}
+
+fn find_subsequence(haystack: &[u8], needle: &[u8]) -> Option<usize> {
+    haystack.windows(needle.len()).position(|window| window == needle)
 }
 
 // 备注：获取本地时间 HH:MM:SS.mmm
@@ -373,6 +417,16 @@ fn send_data(
     }
 }
 
+#[tauri::command]
+fn encode_string(text: String, encoding: String) -> Result<Vec<u8>, String> {
+    if encoding.to_lowercase() == "gbk" {
+        let (cow, _, _) = encoding_rs::GBK.encode(&text);
+        Ok(cow.into_owned())
+    } else {
+        Ok(text.into_bytes())
+    }
+}
+
 fn modbus_crc16(data: &[u8]) -> u16 {
     let mut crc: u16 = 0xFFFF;
     for byte in data {
@@ -400,6 +454,38 @@ fn build_modbus_rtu(
     frame.push((register_addr & 0xFF) as u8);
     frame.push((register_count >> 8) as u8);
     frame.push((register_count & 0xFF) as u8);
+    let crc = modbus_crc16(&frame);
+    frame.push((crc & 0xFF) as u8);
+    frame.push((crc >> 8) as u8);
+    Ok(frame)
+}
+
+#[tauri::command]
+fn build_modbus_write_rtu(
+    slave_id: u8,
+    function_code: u8,
+    register_addr: u16,
+    data: Vec<u8>,
+) -> Result<Vec<u8>, String> {
+    let mut frame = vec![slave_id, function_code];
+    frame.push((register_addr >> 8) as u8);
+    frame.push((register_addr & 0xFF) as u8);
+
+    if function_code == 5 || function_code == 6 {
+        if data.len() != 2 {
+            return Err("FC 05/06 requires exactly 2 bytes of data".into());
+        }
+        frame.extend_from_slice(&data);
+    } else if function_code == 16 {
+        let register_count = (data.len() / 2) as u16;
+        frame.push((register_count >> 8) as u8);
+        frame.push((register_count & 0xFF) as u8);
+        frame.push(data.len() as u8);
+        frame.extend_from_slice(&data);
+    } else {
+        return Err("Unsupported write function code".into());
+    }
+
     let crc = modbus_crc16(&frame);
     frame.push((crc & 0xFF) as u8);
     frame.push((crc >> 8) as u8);
@@ -460,6 +546,13 @@ fn set_close_to_tray(state: tauri::State<AppState>, enabled: bool) -> Result<(),
     Ok(())
 }
 
+#[tauri::command]
+fn set_protocol(state: tauri::State<AppState>, protocol: String) -> Result<(), String> {
+    let mut config = lock_or_err!(state.config, "config");
+    config.protocol = protocol;
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -479,9 +572,12 @@ pub fn run() {
             get_status,
             send_data,
             build_modbus_rtu,
+            build_modbus_write_rtu,
             parse_modbus_rtu,
             set_close_to_tray,
             get_byte_stats,
+            set_protocol,
+            encode_string,
         ])
         .setup(|app| {
             // 备注：系统托盘菜单

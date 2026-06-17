@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useTranslation } from "react-i18next";
 import type { LogEntry, SerialStatus } from "../types/serial";
@@ -12,7 +12,7 @@ interface TerminalPanelProps {
   byteStats: [number, number];
   onAddTextLog: (direction: string, text: string) => void;
   onClearLogs: () => void;
-  onExportLogs: () => void;
+  onExportLogs: (showTimestamp: boolean, showHex: boolean, encoding: "utf-8" | "gbk") => void;
 }
 
 export function TerminalPanel({ logs, logContainerRef, status, byteStats, onAddTextLog, onClearLogs, onExportLogs }: TerminalPanelProps) {
@@ -20,22 +20,48 @@ export function TerminalPanel({ logs, logContainerRef, status, byteStats, onAddT
 
   const [sendMode, setSendMode] = useState<"ascii" | "hex">("ascii");
   const [showHex, setShowHex] = useState(false);
+  const [showTimestamp, setShowTimestamp] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem("terminal-show-timestamp");
+      return saved === null ? true : saved === "true";
+    } catch {
+      return true;
+    }
+  });
   const [sendData, setSendData] = useState("");
   const [autoSend, setAutoSend] = useState(false);
   const [autoSendInterval, setAutoSendInterval] = useState(1000);
   const [lineEnding, setLineEnding] = useState<"none" | "LF" | "CR" | "CRLF" | "LFCR">("none");
   const [sendHistory, setSendHistory] = useState<string[]>([]);
   const [showHistory, setShowHistory] = useState(false);
+  const [encoding, setEncoding] = useState<"utf-8" | "gbk">(() => {
+    try {
+      const saved = localStorage.getItem("terminal-encoding");
+      return (saved as "utf-8" | "gbk") || "utf-8";
+    } catch {
+      return "utf-8";
+    }
+  });
+
+  useEffect(() => {
+    localStorage.setItem("terminal-encoding", encoding);
+  }, [encoding]);
+
+  useEffect(() => {
+    localStorage.setItem("terminal-show-timestamp", String(showTimestamp));
+  }, [showTimestamp]);
 
   // 备注：通过 ref 读取最新值，保证 auto-send interval 稳定
   const sendDataRef = useRef("");
   const lineEndingRef = useRef(lineEnding);
   const statusRef = useRef(status);
   const sendModeRef = useRef(sendMode);
+  const encodingRef = useRef(encoding);
   useEffect(() => { sendDataRef.current = sendData; }, [sendData]);
   useEffect(() => { lineEndingRef.current = lineEnding; }, [lineEnding]);
   useEffect(() => { statusRef.current = status; }, [status]);
   useEffect(() => { sendModeRef.current = sendMode; }, [sendMode]);
+  useEffect(() => { encodingRef.current = encoding; }, [encoding]);
 
   // 备注：切换 ASCII/HEX 时自动转换输入框格式
   const handleSendModeChange = useCallback((mode: "ascii" | "hex") => {
@@ -70,7 +96,12 @@ export function TerminalPanel({ logs, logContainerRef, status, byteStats, onAddT
           bytes.push(parseInt(hexStr.substring(i, i + 2), 16));
         }
       } else {
-        bytes = Array.from(new TextEncoder().encode(data));
+        const enc = encodingRef.current;
+        if (enc === "gbk") {
+          bytes = await invoke<number[]>("encode_string", { text: data, encoding: "gbk" });
+        } else {
+          bytes = Array.from(new TextEncoder().encode(data));
+        }
       }
       const lineEndingBytes: Record<string, number[]> = { none: [], LF: [0x0A], CR: [0x0D], CRLF: [0x0D, 0x0A], LFCR: [0x0A, 0x0D] };
       const extra = lineEndingBytes[ending] ?? [];
@@ -108,22 +139,41 @@ export function TerminalPanel({ logs, logContainerRef, status, byteStats, onAddT
               RX: {(byteStats[0] / 1024).toFixed(1)}K TX: {(byteStats[1] / 1024).toFixed(1)}K
             </span>
           )}
+          <select 
+            value={encoding} 
+            onChange={(e) => setEncoding(e.target.value as "utf-8" | "gbk")} 
+            className="line-ending-select" 
+            style={{ height: "24px", padding: "0 6px", fontSize: "10px", width: "auto" }}
+            title="终端解码字符集"
+          >
+            <option value="utf-8">UTF-8</option>
+            <option value="gbk">GBK (GB2312)</option>
+          </select>
+          <label><input type="checkbox" checked={showTimestamp} onChange={(e) => setShowTimestamp(e.target.checked)} /> {t("terminal.showTimestamp", { defaultValue: "时间戳" })}</label>
           <label><input type="checkbox" checked={showHex} onChange={(e) => setShowHex(e.target.checked)} /> HEX</label>
           <button onClick={onClearLogs}>{t("terminal.clear", { defaultValue: "清空" })}</button>
-          <button onClick={onExportLogs}>{t("terminal.export", { defaultValue: "导出" })}</button>
+          <button onClick={() => onExportLogs(showTimestamp, showHex, encoding)}>{t("terminal.export", { defaultValue: "导出" })}</button>
         </div>
       </div>
       <div className="log-container" ref={logContainerRef} role="log" aria-live="polite">
-        {logs.map((log) => (
-          <div key={log.id} className={`log-entry log-${log.direction.toLowerCase()}`}>
-            <span className="log-dir">{log.direction}</span>
-            <span className="log-data">{log.data || (showHex ? log.hex : log.ascii)}</span>
-          </div>
-        ))}
+        {logs.map((log) => {
+          const display = log.data || (showHex ? log.hex : decodeLogEntry(log.hex, log.ascii, encoding));
+          const byteLen = log.hex ? log.hex.split(" ").filter(Boolean).length : 0;
+          return (
+            <div key={log.id} className={`log-entry log-${log.direction.toLowerCase()}`}>
+              <span className="log-dir">{log.direction}</span>
+              <span className="log-data">
+                {showTimestamp && <span className="log-time" style={{ color: "var(--text-muted)", marginRight: "6px" }}>[{log.timestamp}]</span>}
+                {display}
+                {log.hex && <span className="log-len" style={{ color: "var(--text-muted)", marginLeft: "6px" }}>[{byteLen}B]</span>}
+              </span>
+            </div>
+          );
+        })}
       </div>
       <div className="send-area">
         <div className="send-controls">
-          <label><input type="radio" checked={sendMode === "ascii"} onChange={() => handleSendModeChange("ascii")} /> ASCII</label>
+          <label><input type="radio" checked={sendMode === "ascii"} onChange={() => handleSendModeChange("ascii")} /> ABC</label>
           <label><input type="radio" checked={sendMode === "hex"} onChange={() => handleSendModeChange("hex")} /> HEX</label>
           <label className="auto-send"><input type="checkbox" checked={autoSend} onChange={(e) => setAutoSend(e.target.checked)} /> {t("terminal.autoSend", { defaultValue: "自动" })}</label>
           <input type="number" min={100} value={autoSendInterval} onChange={(e) => setAutoSendInterval(Number(e.target.value))} className="interval" />
@@ -182,4 +232,17 @@ export function TerminalPanel({ logs, logContainerRef, status, byteStats, onAddT
       </div>
     </section>
   );
+}
+
+function decodeLogEntry(hexStr: string, asciiStr: string, encoding: "utf-8" | "gbk"): string {
+  if (!hexStr) return asciiStr;
+  const hexBytes = hexStr.split(" ").filter(Boolean);
+  if (hexBytes.length === 0) return "";
+  try {
+    const bytes = new Uint8Array(hexBytes.map(h => parseInt(h, 16)));
+    const decoder = new TextDecoder(encoding);
+    return decoder.decode(bytes);
+  } catch (e) {
+    return asciiStr;
+  }
 }

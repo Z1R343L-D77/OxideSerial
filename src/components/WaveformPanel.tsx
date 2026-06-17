@@ -101,6 +101,41 @@ export function WaveformPanel({ frame }: WaveformPanelProps) {
   const [deltaT, setDeltaT] = useState(50);
   const [autoPoints, setAutoPoints] = useState(100);
 
+  // Right sidebar drag to resize width state
+  const [sidebarWidth, setSidebarWidth] = useState(() => {
+    try {
+      const saved = localStorage.getItem("waveform-sidebar-width");
+      return saved ? Number(saved) : 200;
+    } catch {
+      return 200;
+    }
+  });
+
+  useEffect(() => {
+    localStorage.setItem("waveform-sidebar-width", String(sidebarWidth));
+  }, [sidebarWidth]);
+
+  const handleResizerMouseDown = useCallback((mouseDownEvent: React.MouseEvent) => {
+    mouseDownEvent.preventDefault();
+    const startX = mouseDownEvent.clientX;
+    const startWidth = sidebarWidth;
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      // Dragging left (reducing ClientX) increases the right sidebar's width.
+      const deltaX = startX - moveEvent.clientX;
+      const nextWidth = Math.max(120, Math.min(400, startWidth + deltaX));
+      setSidebarWidth(nextWidth);
+    };
+
+    const handleMouseUp = () => {
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
+    };
+
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseup", handleMouseUp);
+  }, [sidebarWidth]);
+
   const bufferRef = useRef<{ timestamps: number[]; channels: number[][] }>({
     timestamps: [],
     channels: [],
@@ -681,7 +716,10 @@ export function WaveformPanel({ frame }: WaveformPanelProps) {
           </label>
         </div>
       </div>
-      <aside className="waveform-sidebar">
+
+      <div className="waveform-sidebar-resizer" onMouseDown={handleResizerMouseDown} />
+
+      <aside className="waveform-sidebar" style={{ width: `${sidebarWidth}px`, minWidth: `${sidebarWidth}px` }}>
         <div className="waveform-sidebar-header">
           <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
             <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
