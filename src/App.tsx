@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import { WaveformPanel } from "./components/WaveformPanel";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { Header } from "./components/Header";
@@ -15,6 +16,7 @@ import { applyTheme, watchSystemTheme } from "./utils/theme";
 import "./App.css";
 
 function App() {
+  const { t } = useTranslation();
 
   // 备注：设置状态
   const [config, setConfig] = useState<AppConfig>(() => {

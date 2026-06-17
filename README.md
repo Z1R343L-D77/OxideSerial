@@ -39,25 +39,32 @@
 - 支持 COM 口自动检测，波特率 1200 ~ 4000000
 - 可配置数据位（5-8）、停止位（1-2）、校验位（无/奇/偶）
 - Rust 后台线程持续读取，通过事件机制推送到前端
+- 串口断开自动检测（USB 拔出自动断开）
+- RX/TX 字节计数器实时显示
 
 ### 终端显示
 
-- ASCII / HEX 双模式收发
+- ASCII / HEX 双模式收发，HEX 输入自动格式化
+- HEX 切换影响全部历史记录（实时切换显示）
+- 发送模式切换自动转换输入（ASCII↔HEX 自动去/加空格）
 - 行尾追加（无 / LF / CR / CRLF / LFCR）
 - 发送历史记录（最近 20 条，点击回填）
 - 自动发送（可调间隔）
-- 清空输入按钮
+- 时间戳跟随语言设置
+- 终端日志导出（.txt 文件）
+- UTF-8 / GBK 编码切换
 
 ### 波形显示
 
 - 基于 uPlot 的高性能实时折线图
 - 多通道数据自动识别（CSV 格式 `v1,v2,v3\n`）
+- 波形侧边栏（通道实时数值 + 显隐切换）
 - 滚轮缩放（以鼠标位置为中心，上滚放大，下滚缩小）
 - 左键拖拽平移
 - Auto 模式自动跟随最新数据
 - 暂停/恢复/清空
 - CSV 数据导出
-- 状态栏可调参数：△t 采样间隔、缓冲区上限、Auto 点数对齐
+- 状态栏可调参数：△t 采样间隔（含 Hz 显示）、缓冲区上限、Auto 点数对齐
 - 光标位置实时显示时间和通道值
 
 ### Modbus RTU
@@ -65,14 +72,27 @@
 - 功能码 01-06 支持
 - 自动帧构建与 CRC16 校验
 - 响应解析（含异常检测）
+- Modbus 监测表（M 表）：寄存器别名、数据类型、实时值、状态指示
+- 自动轮询（可调间隔）
+- 寄存器写入（功能码 05/06/16）
+- 批量配置管理
 
 ### 设置面板
 
 - 主题切换（浅色 / 深色 / 跟随系统）
 - 语言切换（简体中文 / English / 繁體中文）
 - 默认视图模式（终端 / 波形 / 分屏）
-- 关闭到托盘、开机自启
-- 版本号显示
+- 关闭到托盘（可配置）
+- 开机自启
+- 窗口状态记忆（大小、位置、最大化）
+
+### 安全与稳定性
+
+- 串口断开自动检测与恢复
+- HEX 发送输入校验（非法字符报错）
+- 线程安全的串口读写（Mutex 安全锁）
+- React ErrorBoundary 防止白屏
+- Content Security Policy
 
 ## 数据格式
 
@@ -167,17 +187,26 @@ python test_serial.py COM11 modbus
 ```
 OxideSerial/
 ├── src/                          # 前端源码
-│   ├── App.tsx                   # 主界面
-│   ├── App.css                   # 样式（含亮色/暗色主题变量）
+│   ├── App.tsx                   # 主布局
+│   ├── App.css                   # 样式（暖色主题变量 + 动效系统）
 │   ├── components/
+│   │   ├── Header.tsx            # 顶部工具栏
+│   │   ├── Sidebar.tsx           # 串口配置 + Modbus 面板
+│   │   ├── TerminalPanel.tsx     # 终端显示 + 发送区
 │   │   ├── WaveformPanel.tsx     # 波形显示组件
-│   │   └── SettingsPanel.tsx     # 设置面板
+│   │   ├── ModbusMonitor.tsx     # Modbus M 表监测
+│   │   ├── SettingsPanel.tsx     # 设置面板
+│   │   └── ErrorBoundary.tsx     # 错误边界
+│   ├── hooks/
+│   │   ├── useSerial.ts          # 串口管理 Hook
+│   │   └── useTerminalLogs.ts    # 终端日志 Hook
+│   ├── types/
+│   │   ├── config.ts             # 配置类型 + APP_VERSION
+│   │   ├── serial.ts             # 串口数据类型
+│   │   └── modbus.ts             # Modbus 类型定义
 │   ├── locales/                  # 国际化翻译
-│   │   ├── zh-CN/translation.json
-│   │   ├── en-US/translation.json
-│   │   └── zh-HK/translation.json
-│   ├── types/config.ts           # 配置类型定义
-│   └── utils/theme.ts            # 主题切换工具
+│   ├── utils/theme.ts            # 主题切换工具
+│   └── main.tsx                  # 入口（含 ErrorBoundary）
 ├── src-tauri/                    # Rust 后端
 │   ├── src/lib.rs                # 串口逻辑、Modbus 协议、事件推送
 │   └── Cargo.toml                # Rust 依赖

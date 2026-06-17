@@ -58,7 +58,16 @@
     "noPorts": "无可用串口",
     "refresh": "刷新",
     "refreshFail": "刷新串口失败",
-    "portClosed": "串口已关闭"
+    "portClosed": "串口已关闭",
+    "dataFormat": "数据格式:",
+    "example": "例子:",
+    "or": "或",
+    "rawDataDesc": "如果您只把OxideSerial当成串口调试助手，不做任何采样数据解析，请务必使用本协议。",
+    "rawDataExample": "RawData不做采样数据解析。RawData协议适用于不需要解析数据，仅仅查看字节流的需求。",
+    "justFloatFdataDesc": "为小端浮点数组，里面放着需要发送的",
+    "justFloatChannelsDesc": "个通道。",
+    "justFloatTailDesc": "为帧尾。",
+    "fireWaterWarning": "注意：FireWater遇到换行才会打印数据，很多新用户在这里产生疑惑。"
   },
   "terminal": {
     "title": "终端",

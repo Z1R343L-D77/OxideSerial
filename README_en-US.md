@@ -39,25 +39,32 @@ Most serial debugging tools either have outdated UIs, rely on Java/Python runtim
 - Automatic COM port detection, baud rates from 1,200 to 4,000,000
 - Configurable data bits (5–8), stop bits (1–2), parity (none/odd/even)
 - Rust background thread for continuous reading via event-driven push
+- Automatic port disconnection detection (USB unplug)
+- Real-time RX/TX byte counters
 
 ### Terminal Display
 
-- ASCII / HEX dual-mode send & receive
+- ASCII / HEX dual-mode send & receive with auto-formatting
+- HEX toggle switches all history display in real time
+- Send mode auto-converts input (ASCII↔HEX space handling)
 - Line ending options (none / LF / CR / CRLF / LFCR)
 - Send history (last 20 entries, click to recall)
 - Auto-send with configurable interval
-- Clear input button
+- Timestamp follows language setting
+- Export terminal log to .txt file
+- UTF-8 / GBK encoding switch
 
 ### Waveform Display
 
 - High-performance real-time line chart powered by uPlot
 - Multi-channel auto-detection (CSV format `v1,v2,v3\n`)
+- Waveform sidebar (channel values + visibility toggle)
 - Scroll-wheel zoom (centered on cursor, scroll up to zoom in)
 - Left-click drag to pan
 - Auto mode follows latest data
 - Pause / Resume / Clear
 - CSV data export
-- Configurable status bar: Δt sample interval, buffer limit, auto-align points
+- Configurable status bar: Δt sample interval (with Hz display), buffer limit, auto-align points
 - Cursor position displays time and channel values in real time
 
 ### Modbus RTU
@@ -65,14 +72,27 @@ Most serial debugging tools either have outdated UIs, rely on Java/Python runtim
 - Function codes 01–06
 - Automatic frame construction with CRC16 checksum
 - Response parsing (including exception detection)
+- Modbus Monitor table: register aliases, data types, real-time values, status indicators
+- Auto polling with configurable interval
+- Register write (function codes 05/06/16)
+- Batch configuration management
 
 ### Settings Panel
 
 - Theme toggle (Light / Dark / Follow System)
 - Language toggle (简体中文 / English / 繁體中文)
 - Default view mode (Terminal / Waveform / Split)
-- Close to tray, auto-start on boot
-- Version display
+- Close to tray (configurable)
+- Auto-start on boot
+- Window state persistence (size, position, maximized)
+
+### Safety & Stability
+
+- Automatic port disconnection detection & recovery
+- HEX send input validation (invalid chars show error)
+- Thread-safe serial read/write (safe mutex locking)
+- React ErrorBoundary prevents white screen on crash
+- Content Security Policy
 
 ## Data Format
 
@@ -167,17 +187,26 @@ python test_serial.py COM11 modbus
 ```
 OxideSerial/
 ├── src/                          # Frontend source
-│   ├── App.tsx                   # Main interface
-│   ├── App.css                   # Styles (light/dark theme variables)
+│   ├── App.tsx                   # Main layout
+│   ├── App.css                   # Styles (warm theme + animation system)
 │   ├── components/
-│   │   ├── WaveformPanel.tsx     # Waveform display component
-│   │   └── SettingsPanel.tsx     # Settings panel
+│   │   ├── Header.tsx            # Top toolbar
+│   │   ├── Sidebar.tsx           # Serial config + Modbus panel
+│   │   ├── TerminalPanel.tsx     # Terminal display + send area
+│   │   ├── WaveformPanel.tsx     # Waveform display
+│   │   ├── ModbusMonitor.tsx     # Modbus monitor table
+│   │   ├── SettingsPanel.tsx     # Settings panel
+│   │   └── ErrorBoundary.tsx     # Error boundary
+│   ├── hooks/
+│   │   ├── useSerial.ts          # Serial management hook
+│   │   └── useTerminalLogs.ts    # Terminal logs hook
+│   ├── types/
+│   │   ├── config.ts             # Config types + APP_VERSION
+│   │   ├── serial.ts             # Serial data types
+│   │   └── modbus.ts             # Modbus type definitions
 │   ├── locales/                  # i18n translations
-│   │   ├── zh-CN/translation.json
-│   │   ├── en-US/translation.json
-│   │   └── zh-HK/translation.json
-│   ├── types/config.ts           # Config type definitions
-│   └── utils/theme.ts            # Theme switching utility
+│   ├── utils/theme.ts            # Theme switching utility
+│   └── main.tsx                  # Entry point (with ErrorBoundary)
 ├── src-tauri/                    # Rust backend
 │   ├── src/lib.rs                # Serial logic, Modbus protocol, event push
 │   └── Cargo.toml                # Rust dependencies

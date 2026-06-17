@@ -58,7 +58,16 @@
     "noPorts": "No ports available",
     "refresh": "Refresh",
     "refreshFail": "Failed to refresh ports",
-    "portClosed": "Port closed"
+    "portClosed": "Port closed",
+    "dataFormat": "Data Format:",
+    "example": "Example:",
+    "or": "or",
+    "rawDataDesc": "If you only use OxideSerial as a serial debugger and do not parse any sample data, please use this protocol.",
+    "rawDataExample": "RawData does not parse sample data. The RawData protocol is suitable for needs where data parsing is not required and only the byte stream is viewed.",
+    "justFloatFdataDesc": "is a little-endian float array, containing the",
+    "justFloatChannelsDesc": "channels to be sent.",
+    "justFloatTailDesc": "is the frame tail.",
+    "fireWaterWarning": "Note: FireWater only prints data when it encounters a newline character. Many new users get confused here."
   },
   "terminal": {
     "title": "Terminal",

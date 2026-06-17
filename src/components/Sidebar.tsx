@@ -192,12 +192,12 @@ export function Sidebar({
                   <div className="protocol-info-box">
                     <div className="protocol-info-title">RawData</div>
                     <div className="protocol-info-section">
-                      <strong>数据格式:</strong>
-                      <p>如果您只把OxideSerial当成串口调试助手，不做任何采样数据解析，请务必使用本协议。</p>
+                      <strong>{t("serial.dataFormat", { defaultValue: "数据格式:" })}</strong>
+                      <p>{t("serial.rawDataDesc", { defaultValue: "如果您只把OxideSerial当成串口调试助手，不做任何采样数据解析，请务必使用本协议。" })}</p>
                     </div>
                     <div className="protocol-info-section">
-                      <strong>例子:</strong>
-                      <p>RawData不做采样数据解析。RawData协议适用于不需要解析数据，仅仅查看字节流的需求。</p>
+                      <strong>{t("serial.example", { defaultValue: "例子:" })}</strong>
+                      <p>{t("serial.rawDataExample", { defaultValue: "RawData不做采样数据解析。RawData协议适用于不需要解析数据，仅仅查看字节流的需求。" })}</p>
                     </div>
                   </div>
                 )}
@@ -205,7 +205,7 @@ export function Sidebar({
                   <div className="protocol-info-box">
                     <div className="protocol-info-title">JustFloat</div>
                     <div className="protocol-info-section">
-                      <strong>数据格式:</strong>
+                      <strong>{t("serial.dataFormat", { defaultValue: "数据格式:" })}</strong>
                       <pre className="code-block">
 {`#define CH_COUNT <N>
 struct Frame {
@@ -213,11 +213,11 @@ struct Frame {
     unsigned char tail[4]{0x00, 0x00, 0x80, 0x7f};
 };`}
                       </pre>
-                      <p>• <code>fdata</code> 为小端浮点数组，里面放着需要发送的 <code>CH_COUNT</code> 个通道。</p>
-                      <p>• <code>tail</code> 为帧尾。</p>
+                      <p>• <code>fdata</code> {t("serial.justFloatFdataDesc", { defaultValue: "为小端浮点数组，里面放着需要发送的" })} <code>CH_COUNT</code> {t("serial.justFloatChannelsDesc", { defaultValue: "个通道。" })}</p>
+                      <p>• <code>tail</code> {t("serial.justFloatTailDesc", { defaultValue: "为帧尾。" })}</p>
                     </div>
                     <div className="protocol-info-section">
-                      <strong>例子:</strong>
+                      <strong>{t("serial.example", { defaultValue: "例子:" })}</strong>
                       <pre className="code-block">
 {`float ch[4];
 ch[0] = sin(t);
@@ -236,19 +236,19 @@ write(tail, 4);`}
                   <div className="protocol-info-box">
                     <div className="protocol-info-title">FireWater</div>
                     <div className="protocol-info-section">
-                      <strong>数据格式:</strong>
+                      <strong>{t("serial.dataFormat", { defaultValue: "数据格式:" })}</strong>
                       <p><code>"&lt;any&gt;:ch0,ch1,ch2,...,chN\n"</code></p>
-                      <p>或</p>
+                      <p>{t("serial.or", { defaultValue: "或" })}</p>
                       <p><code>"ch0,ch1,ch2,...,chN\n"</code></p>
                     </div>
                     <div className="protocol-info-section">
-                      <strong>例子:</strong>
+                      <strong>{t("serial.example", { defaultValue: "例子:" })}</strong>
                       <pre className="code-block">
 {`printf("samples: 1.1, 3.2, -0.6, -0.9\\n")
-或
+` + t("serial.or", { defaultValue: "或" }) + `
 printf("1.1, 3.2, -0.6, -0.9\\n")`}
                       </pre>
-                      <p className="warning-text">• 注意：FireWater遇到换行才会打印数据，很多新用户在这里产生疑惑。</p>
+                      <p className="warning-text">• {t("serial.fireWaterWarning", { defaultValue: "注意：FireWater遇到换行才会打印数据，很多新用户在这里产生疑惑。" })}</p>
                     </div>
                   </div>
                 )}
