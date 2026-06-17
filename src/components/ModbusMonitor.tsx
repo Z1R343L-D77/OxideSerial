@@ -116,7 +116,7 @@ export function ModbusMonitor({
   const handleTimeout = (reg: ModbusRegister) => {
     if (currentRegister.current?.id === reg.id) {
       updateRegisterStatus(reg.id, "error", t("modbus.timeout", { defaultValue: "超时无应答" }));
-      onAddTextLog("ERROR", `Modbus 超时: 从站 ${reg.slaveId}, 地址 ${reg.address}`);
+      onAddTextLog("ERROR", `Modbus ${t("modbus.timeout", { defaultValue: "超时" })}: ${t("modbus.slaveId", { defaultValue: "从站" })} ${reg.slaveId}, ${t("modbus.regAddr", { defaultValue: "地址" })} ${reg.address}`);
       currentRegister.current = null;
       triggerNextPoll();
     }
@@ -205,7 +205,7 @@ export function ModbusMonitor({
           const res = await invoke<any>("parse_modbus_rtu", { data: frame });
           const errCode = res.exception_code ? `0x${res.exception_code.toString(16).toUpperCase()}` : t("modbus.unknown", { defaultValue: "未知" });
           updateRegisterStatus(reg.id, "error", `异常码: ${errCode}`);
-          onAddTextLog("ERROR", `从站 ${slaveId} 返回异常: ${errCode} (地址 ${reg.address})`);
+          onAddTextLog("ERROR", `${t("modbus.slaveId", { defaultValue: "从站" })} ${slaveId} ${t("modbus.exceptionReturned", { defaultValue: "返回异常" })}: ${errCode} (${t("modbus.regAddr", { defaultValue: "地址" })} ${reg.address})`);
         } catch {
           updateRegisterStatus(reg.id, "error", t("modbus.parseError", { defaultValue: "解析错误" }));
         }
@@ -235,11 +235,11 @@ export function ModbusMonitor({
           const valStr = decodeModbusData(res.data, reg.dataType, byteOrder);
           updateRegisterStatus(reg.id, "success", valStr);
         } else {
-          updateRegisterStatus(reg.id, "error", "CRC 校验失败");
-          onAddTextLog("ERROR", `从站 ${slaveId} 数据帧 CRC 校验失败`);
+          updateRegisterStatus(reg.id, "error", t("modbus.crcFail", { defaultValue: "CRC 校验失败" }));
+          onAddTextLog("ERROR", `${t("modbus.slaveId", { defaultValue: "从站" })} ${slaveId} ${t("modbus.crcFailLog", { defaultValue: "数据帧 CRC 校验失败" })}`);
         }
       } catch (e: any) {
-        updateRegisterStatus(reg.id, "error", `解析失败: ${e}`);
+        updateRegisterStatus(reg.id, "error", `${t("modbus.parseError", { defaultValue: "解析失败" })}: ${e}`);
       }
       triggerNextPoll();
     }
@@ -333,11 +333,11 @@ export function ModbusMonitor({
         )
       );
 
-      onAddTextLog("INFO", `Modbus 成功写入从站 ${reg.slaveId} 地址 ${reg.address} = ${writeValue}`);
+      onAddTextLog("INFO", `Modbus ${t("modbus.writeSuccess", { defaultValue: "成功写入" })} ${t("modbus.slaveId", { defaultValue: "从站" })} ${reg.slaveId} ${t("modbus.regAddr", { defaultValue: "地址" })} ${reg.address} = ${writeValue}`);
       setWriteModalReg(null);
     } catch (err: any) {
-      alert(`写入失败: ${err.message || err}`);
-      onAddTextLog("ERROR", `Modbus 写入从站 ${reg.slaveId} 地址 ${reg.address} 失败: ${err.message || err}`);
+      alert(`${t("modbus.writeFail", { defaultValue: "写入失败" })}: ${err.message || err}`);
+      onAddTextLog("ERROR", `Modbus ${t("modbus.writeFail", { defaultValue: "写入失败" })} ${t("modbus.slaveId", { defaultValue: "从站" })} ${reg.slaveId} ${t("modbus.regAddr", { defaultValue: "地址" })} ${reg.address}: ${err.message || err}`);
     } finally {
       isWriteInProgress.current = false;
       // Resume polling
@@ -565,7 +565,7 @@ export function ModbusMonitor({
         <div className="write-modal-backdrop">
           <div className="write-modal-content">
             <div className="write-modal-header">
-              <h3>写入寄存器数值</h3>
+              <h3>{t("modbus.writeModalTitle", { defaultValue: "写入寄存器数值" })}</h3>
               <button className="write-modal-close" onClick={() => setWriteModalReg(null)}>
                 &times;
               </button>
@@ -573,16 +573,16 @@ export function ModbusMonitor({
             <form onSubmit={handleWriteSubmit}>
               <div className="write-modal-info">
                 <div>
-                  <label>别名:</label> <span>{writeModalReg.name}</span>
+                  <label>{t("modbus.modalAlias", { defaultValue: "别名" })}:</label> <span>{writeModalReg.name}</span>
                 </div>
                 <div>
-                  <label>从站 ID:</label> <span>{writeModalReg.slaveId}</span>
+                  <label>{t("modbus.slaveId", { defaultValue: "从站 ID" })}:</label> <span>{writeModalReg.slaveId}</span>
                 </div>
                 <div>
-                  <label>地址:</label> <span>{writeModalReg.address}</span>
+                  <label>{t("modbus.regAddr", { defaultValue: "地址" })}:</label> <span>{writeModalReg.address}</span>
                 </div>
                 <div>
-                  <label>数据类型:</label>{" "}
+                  <label>{t("modbus.dataType", { defaultValue: "数据类型" })}:</label>{" "}
                   <span className={`datatype-badge type-${writeModalReg.dataType}`}>
                     {writeModalReg.dataType}
                   </span>
@@ -590,7 +590,7 @@ export function ModbusMonitor({
               </div>
 
               <div className="form-group" style={{ marginTop: "15px" }}>
-                <label>写入数值:</label>
+                <label>{t("modbus.writeValue", { defaultValue: "写入数值" })}:</label>
                 {writeModalReg.dataType === "bool" ? (
                   <select
                     value={writeValue}
@@ -604,7 +604,7 @@ export function ModbusMonitor({
                   <input
                     type="text"
                     required
-                    placeholder={`请输入要写入的 ${writeModalReg.dataType} 数值`}
+                    placeholder={`${t("modbus.inputPlaceholder", { defaultValue: "请输入要写入的" })} ${writeModalReg.dataType} ${t("modbus.inputValue", { defaultValue: "数值" })}`}
                     value={writeValue}
                     onChange={(e) => setWriteValue(e.target.value)}
                     className="modal-text-input"
@@ -614,10 +614,10 @@ export function ModbusMonitor({
 
               <div className="write-modal-actions">
                 <button type="button" className="btn-secondary" onClick={() => setWriteModalReg(null)}>
-                  取消
+                  {t("modbus.cancel", { defaultValue: "取消" })}
                 </button>
                 <button type="submit" className="btn-connect">
-                  写入发送
+                  {t("modbus.writeSend", { defaultValue: "写入发送" })}
                 </button>
               </div>
             </form>
