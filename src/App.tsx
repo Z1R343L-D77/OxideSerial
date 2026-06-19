@@ -8,6 +8,7 @@ import { TerminalPanel } from "./components/TerminalPanel";
 import { ModbusMonitor } from "./components/ModbusMonitor";
 import { useSerial } from "./hooks/useSerial";
 import { useTerminalLogs } from "./hooks/useTerminalLogs";
+import { invoke } from "@tauri-apps/api/core";
 
 import type { AppConfig, ViewMode } from "./types/config";
 import type { ModbusRegister, ByteOrderOption } from "./types/modbus";
@@ -30,6 +31,13 @@ function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>(config.defaultViewMode);
   const [activeFunction, setActiveFunction] = useState<"serial" | "modbus" | "can">("serial");
+
+  // 同步关闭到托盘设置到 Rust 后端
+  useEffect(() => {
+    void invoke("set_close_to_tray", { enabled: config.closeToTray }).catch((e) => {
+      console.error("Failed to sync close_to_tray setting to backend:", e);
+    });
+  }, [config.closeToTray]);
 
   // Modbus State
   const [modbusRegisters, setModbusRegisters] = useState<ModbusRegister[]>(() => {
@@ -78,10 +86,18 @@ function App() {
   const { logs, logContainerRef, addLog, addTextLog, clearLogs, exportLogs } = useTerminalLogs(config.locale || "zh-CN");
 
   // 备注：串口 hook
-  const { ports, serialConfig, setSerialConfig, status, byteStats, refreshPorts, togglePort } = useSerial(
-    addLog,
-    addTextLog,
-  );
+  const {
+    ports,
+    serialConfig,
+    setSerialConfig,
+    status,
+    byteStats,
+    tcpClients,
+    selectedTcpClient,
+    setSelectedTcpClient,
+    refreshPorts,
+    togglePort,
+  } = useSerial(addLog, addTextLog);
 
   // Stop polling if serial disconnects
   useEffect(() => {
@@ -89,6 +105,45 @@ function App() {
       setIsModbusPolling(false);
     }
   }, [status.connected]);
+
+  // 同步 Modbus 轮询状态及配置到 Rust 后端（仅在定义/开关/间隔/字节序变更时触发）
+  const regConfigsStr = JSON.stringify(
+    modbusRegisters.map((r) => ({
+      id: r.id,
+      name: r.name,
+      slaveId: r.slaveId,
+      functionCode: r.functionCode,
+      address: r.address,
+      count: r.count,
+      dataType: r.dataType,
+      enabled: r.enabled,
+    }))
+  );
+
+  useEffect(() => {
+    if (isModbusPolling && status.connected) {
+      const backendRegs = modbusRegisters.map((r) => ({
+        id: r.id,
+        name: r.name,
+        slave_id: r.slaveId,
+        function_code: r.functionCode,
+        address: r.address,
+        count: r.count,
+        data_type: r.dataType,
+        enabled: r.enabled,
+      }));
+      invoke("start_modbus_poll", {
+        registers: backendRegs,
+        interval: modbusInterval,
+        byteOrder: modbusByteOrder,
+      }).catch((e) => {
+        addTextLog("ERROR", `启动 Modbus 后端轮询失败: ${e}`);
+        setIsModbusPolling(false);
+      });
+    } else {
+      invoke("stop_modbus_poll").catch(() => {});
+    }
+  }, [isModbusPolling, status.connected, regConfigsStr, modbusInterval, modbusByteOrder]);
 
   // Sidebar drag to resize width state
   const [sidebarWidth, setSidebarWidth] = useState(() => {
@@ -249,6 +304,9 @@ function App() {
           onTogglePort={togglePort}
           onError={(msg) => addTextLog("ERROR", msg)}
           activeFunction={activeFunction}
+          tcpClients={tcpClients}
+          selectedTcpClient={selectedTcpClient}
+          onSelectedTcpClientChange={setSelectedTcpClient}
           registers={modbusRegisters}
           setRegisters={setModbusRegisters}
           isPolling={isModbusPolling}
@@ -268,7 +326,6 @@ function App() {
               registers={modbusRegisters}
               setRegisters={setModbusRegisters}
               isPolling={isModbusPolling}
-              pollInterval={modbusInterval}
               byteOrder={modbusByteOrder}
               connected={status.connected}
               onAddTextLog={addTextLog}
@@ -286,7 +343,7 @@ function App() {
                 minWidth: 0,
               }}
             >
-              <WaveformPanel />
+              <WaveformPanel theme={config.theme} />
             </div>
 
             {/* Horizontal Resizer in Split Mode */}

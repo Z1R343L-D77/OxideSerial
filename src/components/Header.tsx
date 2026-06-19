@@ -29,19 +29,32 @@ export function Header({ status, viewMode, onViewModeChange, onToggleSettings }:
       </div>
       <div className="header-right">
         <div className="view-tabs" role="tablist">
-          {(["terminal", "waveform", "split"] as ViewMode[]).map((mode) => (
-            <button
-              key={mode}
-              role="tab"
-              aria-selected={viewMode === mode}
-              className={viewMode === mode ? "active" : ""}
-              onClick={() => onViewModeChange(mode)}
-            >
-              {t(`settings.view.${mode}`, { defaultValue: mode })}
-            </button>
-          ))}
+          {(["terminal", "waveform", "split"] as ViewMode[]).map((mode) => {
+            const viewTitles: Record<ViewMode, string> = {
+              terminal: t("header.viewTerminalTip", { defaultValue: "只显示终端文本日志" }),
+              waveform: t("header.viewWaveformTip", { defaultValue: "只显示波形数据图表" }),
+              split: t("header.viewSplitTip", { defaultValue: "同时显示终端日志与波形图表" }),
+            };
+            return (
+              <button
+                key={mode}
+                role="tab"
+                aria-selected={viewMode === mode}
+                className={viewMode === mode ? "active" : ""}
+                onClick={() => onViewModeChange(mode)}
+                title={viewTitles[mode]}
+              >
+                {t(`settings.view.${mode}`, { defaultValue: mode })}
+              </button>
+            );
+          })}
         </div>
-        <button className="btn-settings" onClick={onToggleSettings} aria-label={t("settings.title", { defaultValue: "设置" })}>
+        <button 
+          className="btn-settings" 
+          onClick={onToggleSettings} 
+          aria-label={t("settings.title", { defaultValue: "设置" })}
+          title={t("settings.titleTip", { defaultValue: "打开系统配置与偏好设置" })}
+        >
           ⚙
         </button>
       </div>

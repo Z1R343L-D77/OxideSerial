@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useTranslation } from "react-i18next";
@@ -8,7 +8,6 @@ interface ModbusMonitorProps {
   registers: ModbusRegister[];
   setRegisters: React.Dispatch<React.SetStateAction<ModbusRegister[]>>;
   isPolling: boolean;
-  pollInterval: number;
   byteOrder: ByteOrderOption;
   connected: boolean;
   onAddTextLog: (direction: string, text: string) => void;
@@ -18,234 +17,50 @@ export function ModbusMonitor({
   registers,
   setRegisters,
   isPolling,
-  pollInterval,
   byteOrder,
   connected,
   onAddTextLog,
 }: ModbusMonitorProps) {
   const { t } = useTranslation();
-  // References for polling queue state machine
-  const registersRef = useRef<ModbusRegister[]>(registers);
-  const activeIndex = useRef(0);
-  const rxBuffer = useRef<number[]>([]);
-  const currentRegister = useRef<ModbusRegister | null>(null);
-  const isWriteInProgress = useRef(false);
-
-  // Timers
-  const timeoutTimer = useRef<number | null>(null);
-  const pollDelayTimer = useRef<number | null>(null);
-
   // UI States
   const [editingField, setEditingField] = useState<{ id: string; field: "name" | "address" } | null>(null);
   const [editValue, setEditValue] = useState("");
   const [writeModalReg, setWriteModalReg] = useState<ModbusRegister | null>(null);
   const [writeValue, setWriteValue] = useState("");
 
-  // Sync registers to ref so polling loop always has fresh data
+  // 监听后端推送的轮询数据结果
   useEffect(() => {
-    registersRef.current = registers;
-  }, [registers]);
+    interface ModbusRegisterResult {
+      id: string;
+      value: string;
+      status: string;
+      last_updated: string;
+    }
 
-  // Keep a clean function to update register state
-  const updateRegisterStatus = (id: string, status: ModbusRegister["status"], value?: string) => {
-    setRegisters((prev) =>
-      prev.map((r) => {
-        if (r.id === id) {
-          const next: ModbusRegister = { ...r, status };
-          if (value !== undefined) {
-            next.value = value;
-            if (status === "success") {
-              next.lastUpdated = new Date().toLocaleTimeString();
-            }
+    const unlistenPromise = listen<ModbusRegisterResult[]>("modbus-poll-result", (event) => {
+      const results = event.payload;
+      setRegisters((prev) =>
+        prev.map((r) => {
+          const matched = results.find((res) => res.id === r.id);
+          if (matched) {
+            return {
+              ...r,
+              value: matched.value,
+              status: matched.status as ModbusRegister["status"],
+              lastUpdated: matched.last_updated,
+            };
           }
-          return next;
-        }
-        return r;
-      })
-    );
-  };
-
-  // 1. Sequential Polling Loop
-  const pollNext = async () => {
-    // Stop if conditions are not met
-    if (!connected || !isPolling || isWriteInProgress.current) {
-      return;
-    }
-
-    const enabled = registersRef.current.filter((r) => r.enabled);
-    if (enabled.length === 0) {
-      // No registers enabled, check again in pollInterval
-      pollDelayTimer.current = window.setTimeout(pollNext, pollInterval);
-      return;
-    }
-
-    if (activeIndex.current >= enabled.length) {
-      activeIndex.current = 0;
-    }
-
-    const reg = enabled[activeIndex.current];
-    currentRegister.current = reg;
-    rxBuffer.current = [];
-
-    // Set UI to polling
-    updateRegisterStatus(reg.id, "polling");
-
-    try {
-      // Build read RTU frame
-      const frame = await invoke<number[]>("build_modbus_rtu", {
-        slaveId: reg.slaveId,
-        functionCode: reg.functionCode,
-        registerAddr: reg.address,
-        registerCount: reg.count,
-      });
-
-      // Start response timeout timer (300ms)
-      timeoutTimer.current = window.setTimeout(() => {
-        handleTimeout(reg);
-      }, 300);
-
-      // Send the data
-      await invoke("send_data", { data: frame });
-    } catch (e: any) {
-      updateRegisterStatus(reg.id, "error", `发送错误: ${e}`);
-      onAddTextLog("ERROR", `Modbus 扫频发送错误: ${e}`);
-      triggerNextPoll();
-    }
-  };
-
-  const handleTimeout = (reg: ModbusRegister) => {
-    if (currentRegister.current?.id === reg.id) {
-      updateRegisterStatus(reg.id, "error", t("modbus.timeout", { defaultValue: "超时无应答" }));
-      onAddTextLog("ERROR", `Modbus ${t("modbus.timeout", { defaultValue: "超时" })}: ${t("modbus.slaveId", { defaultValue: "从站" })} ${reg.slaveId}, ${t("modbus.regAddr", { defaultValue: "地址" })} ${reg.address}`);
-      currentRegister.current = null;
-      triggerNextPoll();
-    }
-  };
-
-  const triggerNextPoll = () => {
-    if (timeoutTimer.current) {
-      clearTimeout(timeoutTimer.current);
-      timeoutTimer.current = null;
-    }
-    activeIndex.current += 1;
-    pollDelayTimer.current = window.setTimeout(pollNext, 50); // 50ms safety inter-frame delay
-  };
-
-  // Start/Stop Polling hook
-  useEffect(() => {
-    if (isPolling && connected) {
-      activeIndex.current = 0;
-      void pollNext();
-    } else {
-      if (pollDelayTimer.current) {
-        clearTimeout(pollDelayTimer.current);
-        pollDelayTimer.current = null;
-      }
-      if (timeoutTimer.current) {
-        clearTimeout(timeoutTimer.current);
-        timeoutTimer.current = null;
-      }
-      currentRegister.current = null;
-    }
-
-    return () => {
-      if (pollDelayTimer.current) clearTimeout(pollDelayTimer.current);
-      if (timeoutTimer.current) clearTimeout(timeoutTimer.current);
-    };
-  }, [isPolling, connected]);
-
-  // 2. Listen to Serial RX Events
-  useEffect(() => {
-    const unlistenPromise = listen<any>("serial-data", (event) => {
-      const d = event.payload;
-      if (d.direction !== "RX") return;
-      if (!isPolling || !currentRegister.current || isWriteInProgress.current) return;
-
-      // Convert hex strings back to raw bytes
-      const bytes = d.hex
-        .split(" ")
-        .filter(Boolean)
-        .map((h: string) => parseInt(h, 16));
-
-      rxBuffer.current = [...rxBuffer.current, ...bytes];
-      void processRxBuffer();
+          return r;
+        })
+      );
     });
 
     return () => {
       void unlistenPromise.then((fn) => fn());
     };
-  }, [isPolling, byteOrder]);
+  }, [setRegisters]);
 
-  const processRxBuffer = async () => {
-    const reg = currentRegister.current;
-    if (!reg) return;
-
-    const buf = rxBuffer.current;
-    if (buf.length < 3) return; // Need at least header + byte count to do anything
-
-    const slaveId = buf[0];
-    const fc = buf[1];
-
-    // Check Exception response
-    const isException = (fc & 0x80) !== 0;
-
-    if (isException) {
-      if (buf.length >= 5) {
-        const frame = buf.slice(0, 5);
-        rxBuffer.current = buf.slice(5);
-
-        // Cancel timeout
-        if (timeoutTimer.current) {
-          clearTimeout(timeoutTimer.current);
-          timeoutTimer.current = null;
-        }
-        currentRegister.current = null;
-
-        try {
-          const res = await invoke<any>("parse_modbus_rtu", { data: frame });
-          const errCode = res.exception_code ? `0x${res.exception_code.toString(16).toUpperCase()}` : t("modbus.unknown", { defaultValue: "未知" });
-          updateRegisterStatus(reg.id, "error", `异常码: ${errCode}`);
-          onAddTextLog("ERROR", `${t("modbus.slaveId", { defaultValue: "从站" })} ${slaveId} ${t("modbus.exceptionReturned", { defaultValue: "返回异常" })}: ${errCode} (${t("modbus.regAddr", { defaultValue: "地址" })} ${reg.address})`);
-        } catch {
-          updateRegisterStatus(reg.id, "error", t("modbus.parseError", { defaultValue: "解析错误" }));
-        }
-        triggerNextPoll();
-      }
-      return;
-    }
-
-    // Normal response length: 5 + N bytes where N = buf[2]
-    const byteCount = buf[2];
-    const expectedLen = 5 + byteCount;
-
-    if (buf.length >= expectedLen) {
-      const frame = buf.slice(0, expectedLen);
-      rxBuffer.current = buf.slice(expectedLen);
-
-      // Cancel timeout
-      if (timeoutTimer.current) {
-        clearTimeout(timeoutTimer.current);
-        timeoutTimer.current = null;
-      }
-      currentRegister.current = null;
-
-      try {
-        const res = await invoke<any>("parse_modbus_rtu", { data: frame });
-        if (res.crc_valid) {
-          const valStr = decodeModbusData(res.data, reg.dataType, byteOrder);
-          updateRegisterStatus(reg.id, "success", valStr);
-        } else {
-          updateRegisterStatus(reg.id, "error", t("modbus.crcFail", { defaultValue: "CRC 校验失败" }));
-          onAddTextLog("ERROR", `${t("modbus.slaveId", { defaultValue: "从站" })} ${slaveId} ${t("modbus.crcFailLog", { defaultValue: "数据帧 CRC 校验失败" })}`);
-        }
-      } catch (e: any) {
-        updateRegisterStatus(reg.id, "error", `${t("modbus.parseError", { defaultValue: "解析失败" })}: ${e}`);
-      }
-      triggerNextPoll();
-    }
-  };
-
-  // 3. Write register executor
+  // 写入寄存器执行器
   const handleWriteSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!writeModalReg || !connected) return;
@@ -264,55 +79,16 @@ export function ModbusMonitor({
       return;
     }
 
-    // Pause polling thread
-    isWriteInProgress.current = true;
-    if (timeoutTimer.current) clearTimeout(timeoutTimer.current);
-    if (pollDelayTimer.current) clearTimeout(pollDelayTimer.current);
-    currentRegister.current = null;
-
     try {
-      const frame = await invoke<number[]>("build_modbus_write_rtu", {
+      // 直接调用后端写入指令并等待响应（底层自动进行互斥锁保护）
+      await invoke("write_modbus_register", {
         slaveId: reg.slaveId,
         functionCode: writeFC,
         registerAddr: reg.address,
         data: dataBytes,
       });
 
-      let resolved = false;
-
-      // Register temporary listener to wait for write confirmation echo (timeout 600ms)
-      const writePromise = new Promise<boolean>((resolve, reject) => {
-        const unlistenPromise = listen<any>("serial-data", (event) => {
-          if (resolved) return;
-          const d = event.payload;
-          if (d.direction !== "RX") return;
-
-          const bytes = d.hex
-            .split(" ")
-            .filter(Boolean)
-            .map((h: string) => parseInt(h, 16));
-
-          // Echo response validation (usually matches slave ID and function code)
-          if (bytes.length >= 8 && bytes[0] === reg.slaveId && bytes[1] === writeFC) {
-            resolved = true;
-            resolve(true);
-          }
-        });
-
-        setTimeout(() => {
-          if (!resolved) {
-            resolved = true;
-            void unlistenPromise.then((fn) => fn());
-            reject(new Error(t("modbus.writeTimeout", { defaultValue: "写入超时无响应" })));
-          }
-        }, 600);
-      });
-
-      // Send write frame
-      await invoke("send_data", { data: frame });
-      await writePromise;
-
-      // Update locally
+      // 本地同步更新显示值
       const friendlyVal =
         reg.dataType === "bool"
           ? writeValue.toLowerCase() === "true" || writeValue === "1" || writeValue.toLowerCase() === "on"
@@ -336,14 +112,8 @@ export function ModbusMonitor({
       onAddTextLog("INFO", `Modbus ${t("modbus.writeSuccess", { defaultValue: "成功写入" })} ${t("modbus.slaveId", { defaultValue: "从站" })} ${reg.slaveId} ${t("modbus.regAddr", { defaultValue: "地址" })} ${reg.address} = ${writeValue}`);
       setWriteModalReg(null);
     } catch (err: any) {
-      alert(`${t("modbus.writeFail", { defaultValue: "写入失败" })}: ${err.message || err}`);
-      onAddTextLog("ERROR", `Modbus ${t("modbus.writeFail", { defaultValue: "写入失败" })} ${t("modbus.slaveId", { defaultValue: "从站" })} ${reg.slaveId} ${t("modbus.regAddr", { defaultValue: "地址" })} ${reg.address}: ${err.message || err}`);
-    } finally {
-      isWriteInProgress.current = false;
-      // Resume polling
-      if (isPolling) {
-        pollDelayTimer.current = window.setTimeout(pollNext, pollInterval);
-      }
+      alert(`${t("modbus.writeFail", { defaultValue: "写入失败" })}: ${err}`);
+      onAddTextLog("ERROR", `Modbus ${t("modbus.writeFail", { defaultValue: "写入失败" })} ${t("modbus.slaveId", { defaultValue: "从站" })} ${reg.slaveId} ${t("modbus.regAddr", { defaultValue: "地址" })} ${reg.address}: ${err}`);
     }
   };
 
@@ -628,66 +398,7 @@ export function ModbusMonitor({
   );
 }
 
-// Helper: Decode binary Modbus registers
-function decodeModbusData(data: number[], dataType: string, byteOrder: ByteOrderOption): string {
-  if (dataType === "bool") {
-    return (data[0] & 0x01) !== 0 ? "ON" : "OFF";
-  }
 
-  if (dataType === "int16" || dataType === "uint16") {
-    if (data.length < 2) return "-";
-    const u8 = new Uint8Array(data);
-    const view = new DataView(u8.buffer);
-    return dataType === "int16"
-      ? view.getInt16(0, false).toString()
-      : view.getUint16(0, false).toString();
-  }
-
-  // 32-bit types
-  if (data.length < 4) return "-";
-  const swapped = new Uint8Array(4);
-  switch (byteOrder) {
-    case "ABCD":
-      swapped[0] = data[0];
-      swapped[1] = data[1];
-      swapped[2] = data[2];
-      swapped[3] = data[3];
-      break;
-    case "CDAB":
-      swapped[0] = data[2];
-      swapped[1] = data[3];
-      swapped[2] = data[0];
-      swapped[3] = data[1];
-      break;
-    case "BADC":
-      swapped[0] = data[1];
-      swapped[1] = data[0];
-      swapped[2] = data[3];
-      swapped[3] = data[2];
-      break;
-    case "DCBA":
-      swapped[0] = data[3];
-      swapped[1] = data[2];
-      swapped[2] = data[1];
-      swapped[3] = data[0];
-      break;
-  }
-
-  const view = new DataView(swapped.buffer);
-  switch (dataType) {
-    case "int32":
-      return view.getInt32(0, false).toString();
-    case "uint32":
-      return view.getUint32(0, false).toString();
-    case "float32":
-      const val = view.getFloat32(0, false);
-      if (isNaN(val)) return "NaN";
-      if (!isFinite(val)) return "Infinity";
-      return val.toFixed(4).replace(/\.?0+$/, "");
-    default:
-      return "-";
-  }
-}
 
 // Helper: Convert user input to bytes array based on DataType & ByteOrder
 function prepareWriteData(valueStr: string, dataType: string, byteOrder: ByteOrderOption): number[] | null {

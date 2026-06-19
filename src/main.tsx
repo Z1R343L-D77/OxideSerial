@@ -32,3 +32,80 @@ createRoot(document.getElementById('root')!).render(
     </ErrorBoundary>
   </StrictMode>,
 )
+
+// 备注：实现全局自定义悬浮提示框 (Tooltip) 替换浏览器默认样式
+const createGlobalTooltip = () => {
+  const tooltipEl = document.createElement('div');
+  tooltipEl.className = 'global-app-tooltip';
+  tooltipEl.style.position = 'fixed';
+  tooltipEl.style.pointerEvents = 'none';
+  tooltipEl.style.zIndex = '99999';
+  tooltipEl.style.display = 'none';
+  document.body.appendChild(tooltipEl);
+
+  let activeEl: HTMLElement | null = null;
+
+  const hideTooltip = () => {
+    if (activeEl) {
+      const content = activeEl.getAttribute('data-tooltip-content');
+      if (content) {
+        activeEl.setAttribute('title', content);
+        activeEl.removeAttribute('data-tooltip-content');
+      }
+      activeEl = null;
+    }
+    tooltipEl.style.display = 'none';
+  };
+
+  document.addEventListener('mouseover', (e) => {
+    const el = e.target as HTMLElement;
+    if (!el || typeof el.closest !== 'function') return;
+    const target = el.closest('[title]') as HTMLElement | null;
+    if (!target) return;
+
+    if (activeEl && activeEl !== target) {
+      hideTooltip();
+    }
+
+    activeEl = target;
+    const originalTitle = target.getAttribute('title') || '';
+    if (!originalTitle) return;
+
+    target.removeAttribute('title');
+    target.setAttribute('data-tooltip-content', originalTitle);
+
+    tooltipEl.textContent = originalTitle;
+    tooltipEl.style.display = 'block';
+    
+    const rect = target.getBoundingClientRect();
+    let top = rect.top - tooltipEl.offsetHeight - 8;
+    let left = rect.left + (rect.width - tooltipEl.offsetWidth) / 2;
+
+    if (top < 8) {
+      top = rect.bottom + 8;
+    }
+    if (left < 8) {
+      left = 8;
+    } else if (left + tooltipEl.offsetWidth > window.innerWidth - 8) {
+      left = window.innerWidth - tooltipEl.offsetWidth - 8;
+    }
+
+    tooltipEl.style.top = `${top}px`;
+    tooltipEl.style.left = `${left}px`;
+  }, true);
+
+  document.addEventListener('mouseout', (e) => {
+    const el = e.target as HTMLElement;
+    if (activeEl && (!el || typeof el.closest !== 'function' || el.closest('[data-tooltip-content]') !== activeEl)) {
+      hideTooltip();
+    }
+  }, true);
+
+  document.addEventListener('scroll', hideTooltip, true);
+  document.addEventListener('wheel', hideTooltip, true);
+  window.addEventListener('blur', hideTooltip);
+};
+
+if (typeof document !== 'undefined') {
+  createGlobalTooltip();
+}

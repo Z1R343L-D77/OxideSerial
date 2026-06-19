@@ -34,12 +34,13 @@ Most serial debugging tools either have outdated UIs, rely on Java/Python runtim
 
 ## Features
 
-### Serial Connection
+### Data Connection
 
-- Automatic COM port detection, baud rates from 1,200 to 4,000,000
-- Configurable data bits (5–8), stop bits (1–2), parity (none/odd/even)
-- Rust background thread for continuous reading via event-driven push
-- Automatic port disconnection detection (USB unplug)
+- **Serial Mode**: Automatic COM port detection, baud rates 1,200 to 4,000,000, configurable data/stop/parity bits
+- **UDP Mode**: Remote IP/port configuration, local port binding
+- **TCP Client**: Target IP/port, custom handshake data packet
+- **TCP Server**: Multi-client support, client selection, client management
+- Automatic disconnection detection & reconnect notification
 - Real-time RX/TX byte counters
 
 ### Terminal Display
@@ -59,6 +60,8 @@ Most serial debugging tools either have outdated UIs, rely on Java/Python runtim
 - High-performance real-time line chart powered by uPlot
 - Multi-channel auto-detection (CSV format `v1,v2,v3\n`)
 - Waveform sidebar (channel values + visibility toggle)
+- Waveform scrollbar (drag to navigate)
+- Info bar (total/visible points, time divisions)
 - Scroll-wheel zoom (centered on cursor, scroll up to zoom in)
 - Left-click drag to pan
 - Auto mode follows latest data
@@ -73,7 +76,7 @@ Most serial debugging tools either have outdated UIs, rely on Java/Python runtim
 - Automatic frame construction with CRC16 checksum
 - Response parsing (including exception detection)
 - Modbus Monitor table: register aliases, data types, real-time values, status indicators
-- Auto polling with configurable interval
+- Backend auto polling with configurable interval
 - Register write (function codes 05/06/16)
 - Batch configuration management
 
@@ -111,6 +114,7 @@ Each value maps to a channel with auto-assigned colors. Any number of channels i
 - Sensor data acquisition & visualization
 - Modbus RTU device communication testing
 - Embedded development serial debugging
+- Network device debugging (UDP/TCP)
 - Real-time waveform analysis
 
 ## Quick Start
@@ -177,7 +181,7 @@ python test_serial.py COM11 modbus
 | ----- | ---------- | ------- |
 | Frontend | React 19 + TypeScript | UI components & interaction |
 | Charts | uPlot | High-performance real-time rendering |
-| Backend | Rust + serialport | Serial communication & data processing |
+| Backend | Rust + serialport | Serial/UDP/TCP communication & data processing |
 | Framework | Tauri 2 | Cross-platform desktop app framework |
 | Protocol | Modbus RTU | Industrial communication protocol |
 | i18n | i18next | Chinese / English / Traditional Chinese |
@@ -191,24 +195,24 @@ OxideSerial/
 │   ├── App.css                   # Styles (warm theme + animation system)
 │   ├── components/
 │   │   ├── Header.tsx            # Top toolbar
-│   │   ├── Sidebar.tsx           # Serial config + Modbus panel
+│   │   ├── Sidebar.tsx           # Connection config + Modbus panel
 │   │   ├── TerminalPanel.tsx     # Terminal display + send area
 │   │   ├── WaveformPanel.tsx     # Waveform display
 │   │   ├── ModbusMonitor.tsx     # Modbus monitor table
 │   │   ├── SettingsPanel.tsx     # Settings panel
 │   │   └── ErrorBoundary.tsx     # Error boundary
 │   ├── hooks/
-│   │   ├── useSerial.ts          # Serial management hook
+│   │   ├── useSerial.ts          # Connection management hook
 │   │   └── useTerminalLogs.ts    # Terminal logs hook
 │   ├── types/
 │   │   ├── config.ts             # Config types + APP_VERSION
-│   │   ├── serial.ts             # Serial data types
+│   │   ├── serial.ts             # Connection data types
 │   │   └── modbus.ts             # Modbus type definitions
 │   ├── locales/                  # i18n translations
 │   ├── utils/theme.ts            # Theme switching utility
 │   └── main.tsx                  # Entry point (with ErrorBoundary)
 ├── src-tauri/                    # Rust backend
-│   ├── src/lib.rs                # Serial logic, Modbus protocol, event push
+│   ├── src/lib.rs                # Connection logic, Modbus protocol, event push
 │   └── Cargo.toml                # Rust dependencies
 ├── test_serial.py                # Test script
 └── README.md

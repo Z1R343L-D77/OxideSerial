@@ -34,12 +34,13 @@
 
 ## 功能特点
 
-### 串口连接
+### 数据连接
 
-- 支持 COM 口自动检测，波特率 1200 ~ 4000000
-- 可配置数据位（5-8）、停止位（1-2）、校验位（无/奇/偶）
-- Rust 后台线程持续读取，通过事件机制推送到前端
-- 串口断开自动检测（USB 拔出自动断开）
+- **串口模式**：COM 口自动检测，波特率 1200 ~ 4000000，可配置数据位/停止位/校验位
+- **UDP 模式**：支持远程 IP/端口配置，本地端口绑定
+- **TCP Client**：支持目标 IP/端口、自定义握手数据包
+- **TCP Server**：支持多客户端连接、客户端选择、客户端管理
+- 连接断开自动检测与重连提示
 - RX/TX 字节计数器实时显示
 
 ### 终端显示
@@ -59,6 +60,8 @@
 - 基于 uPlot 的高性能实时折线图
 - 多通道数据自动识别（CSV 格式 `v1,v2,v3\n`）
 - 波形侧边栏（通道实时数值 + 显隐切换）
+- 波形底部滚动条（拖拽快速导航）
+- 信息栏（总点数/可视点数、时间分度值）
 - 滚轮缩放（以鼠标位置为中心，上滚放大，下滚缩小）
 - 左键拖拽平移
 - Auto 模式自动跟随最新数据
@@ -73,7 +76,7 @@
 - 自动帧构建与 CRC16 校验
 - 响应解析（含异常检测）
 - Modbus 监测表（M 表）：寄存器别名、数据类型、实时值、状态指示
-- 自动轮询（可调间隔）
+- 后端自动轮询（可调间隔）
 - 寄存器写入（功能码 05/06/16）
 - 批量配置管理
 
@@ -111,6 +114,7 @@
 - 传感器数据采集与可视化
 - Modbus RTU 设备通信测试
 - 嵌入式开发串口调试
+- 网络设备调试（UDP/TCP）
 - 实时波形分析
 
 ## 快速开始
@@ -177,7 +181,7 @@ python test_serial.py COM11 modbus
 | -------- | --------------------- | ---------------------------- |
 | 前端     | React 19 + TypeScript | UI 组件与交互逻辑            |
 | 图表     | uPlot                 | 高性能实时折线图渲染         |
-| 后端     | Rust + serialport     | 串口通信与数据处理           |
+| 后端     | Rust + serialport     | 串口/UDP/TCP 通信与数据处理  |
 | 框架     | Tauri 2               | 跨平台桌面应用框架           |
 | 协议     | Modbus RTU            | 工业通信协议支持             |
 | 国际化   | i18next               | 中/英/繁体三语言支持         |
@@ -191,24 +195,24 @@ OxideSerial/
 │   ├── App.css                   # 样式（暖色主题变量 + 动效系统）
 │   ├── components/
 │   │   ├── Header.tsx            # 顶部工具栏
-│   │   ├── Sidebar.tsx           # 串口配置 + Modbus 面板
+│   │   ├── Sidebar.tsx           # 连接配置 + Modbus 面板
 │   │   ├── TerminalPanel.tsx     # 终端显示 + 发送区
 │   │   ├── WaveformPanel.tsx     # 波形显示组件
 │   │   ├── ModbusMonitor.tsx     # Modbus M 表监测
 │   │   ├── SettingsPanel.tsx     # 设置面板
 │   │   └── ErrorBoundary.tsx     # 错误边界
 │   ├── hooks/
-│   │   ├── useSerial.ts          # 串口管理 Hook
+│   │   ├── useSerial.ts          # 连接管理 Hook
 │   │   └── useTerminalLogs.ts    # 终端日志 Hook
 │   ├── types/
 │   │   ├── config.ts             # 配置类型 + APP_VERSION
-│   │   ├── serial.ts             # 串口数据类型
+│   │   ├── serial.ts             # 连接数据类型
 │   │   └── modbus.ts             # Modbus 类型定义
 │   ├── locales/                  # 国际化翻译
 │   ├── utils/theme.ts            # 主题切换工具
 │   └── main.tsx                  # 入口（含 ErrorBoundary）
 ├── src-tauri/                    # Rust 后端
-│   ├── src/lib.rs                # 串口逻辑、Modbus 协议、事件推送
+│   ├── src/lib.rs                # 连接逻辑、Modbus 协议、事件推送
 │   └── Cargo.toml                # Rust 依赖
 ├── test_serial.py                # 测试脚本
 └── README.md

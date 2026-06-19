@@ -1,9 +1,12 @@
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useTranslation } from "react-i18next";
+import { List } from "react-window";
+import type { ListImperativeAPI } from "react-window";
 import type { LogEntry, SerialStatus } from "../types/serial";
 
 const SEND_HISTORY_LIMIT = 20;
+const LOG_ROW_HEIGHT = 22;
 
 interface TerminalPanelProps {
   logs: LogEntry[];
@@ -28,6 +31,30 @@ export function TerminalPanel({ logs, logContainerRef, status, byteStats, onAddT
       return true;
     }
   });
+  const [showRx, setShowRx] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem("terminal-show-rx");
+      return saved === null ? true : saved === "true";
+    } catch {
+      return true;
+    }
+  });
+  const [showTx, setShowTx] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem("terminal-show-tx");
+      return saved === null ? true : saved === "true";
+    } catch {
+      return true;
+    }
+  });
+  const [fontSize, setFontSize] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem("terminal-font-size");
+      return saved ? Number(saved) : 11;
+    } catch {
+      return 11;
+    }
+  });
   const [sendData, setSendData] = useState("");
   const [autoSend, setAutoSend] = useState(false);
   const [autoSendInterval, setAutoSendInterval] = useState(1000);
@@ -50,6 +77,39 @@ export function TerminalPanel({ logs, logContainerRef, status, byteStats, onAddT
   useEffect(() => {
     localStorage.setItem("terminal-show-timestamp", String(showTimestamp));
   }, [showTimestamp]);
+
+  useEffect(() => {
+    localStorage.setItem("terminal-show-rx", String(showRx));
+  }, [showRx]);
+
+  useEffect(() => {
+    localStorage.setItem("terminal-show-tx", String(showTx));
+  }, [showTx]);
+
+  useEffect(() => {
+    localStorage.setItem("terminal-font-size", String(fontSize));
+  }, [fontSize]);
+
+  // 备注：虚拟列表 ref，用于自动滚动
+  const listRef = useRef<ListImperativeAPI>(null);
+
+  // 备注：过滤后的日志
+  const filteredLogs = useMemo(() => {
+    return logs.filter((log) => {
+      if (log.direction === "RX" && !showRx) return false;
+      if (log.direction === "TX" && !showTx) return false;
+      return true;
+    });
+  }, [logs, showRx, showTx]);
+
+  // 备注：虚拟列表数据变更后自动滚动到底部
+  const prevLengthRef = useRef(0);
+  useEffect(() => {
+    if (filteredLogs.length > prevLengthRef.current && listRef.current) {
+      listRef.current.scrollToRow({ index: filteredLogs.length - 1, align: "end" });
+    }
+    prevLengthRef.current = filteredLogs.length;
+  }, [filteredLogs.length]);
 
   // 备注：通过 ref 读取最新值，保证 auto-send interval 稳定
   const sendDataRef = useRef("");
@@ -129,47 +189,131 @@ export function TerminalPanel({ logs, logContainerRef, status, byteStats, onAddT
     return () => { if (autoSendTimerRef.current) clearInterval(autoSendTimerRef.current); };
   }, [autoSend, status.connected, autoSendInterval]);
 
+  // 备注：虚拟列表行渲染器
+  const LogRow = useCallback(({ index, style }: { index: number; style: React.CSSProperties }) => {
+    const log = filteredLogs[index];
+    if (!log) return null;
+    const display = log.data || (showHex ? log.hex : decodeLogEntry(log.hex, log.ascii, encoding));
+    const byteLen = log.hex ? log.hex.split(" ").filter(Boolean).length : 0;
+    return (
+      <div style={style} className={`log-entry log-${log.direction.toLowerCase()}`}>
+        <span className="log-dir">{log.direction}</span>
+        <span className="log-data">
+          {showTimestamp && <span className="log-time" style={{ color: "var(--text-muted)", marginRight: "6px" }}>[{log.timestamp}]</span>}
+          {display}
+          {log.hex && <span className="log-len" style={{ color: "var(--text-muted)", marginLeft: "6px" }}>[{byteLen}B]</span>}
+        </span>
+      </div>
+    );
+  }, [filteredLogs, showHex, showTimestamp, encoding]);
+
   return (
     <section className="panel terminal-panel" style={{ display: "flex" }}>
       <div className="terminal-header">
         <h3>{t("terminal.title", { defaultValue: "终端" })}</h3>
-        <div className="terminal-controls">
+        <div className="terminal-controls" style={{ display: "flex", alignItems: "center", gap: "6px" }}>
           {status.connected && (
-            <span className="byte-stats" style={{ fontSize: 10, color: "var(--text-muted)", fontFamily: "Consolas, monospace" }}>
+            <span className="byte-stats" style={{ fontSize: 10, color: "var(--text-muted)", fontFamily: "Consolas, monospace", marginRight: "4px" }}>
               RX: {(byteStats[0] / 1024).toFixed(1)}K TX: {(byteStats[1] / 1024).toFixed(1)}K
             </span>
           )}
+          
+          {/* 显示方式: 字符串 (Abc) / 十六进制 (Hex) */}
+          <button
+            className={`btn-toolbar-toggle ${!showHex ? "active" : ""}`}
+            onClick={() => setShowHex(false)}
+            title={t("terminal.displayModeString", { defaultValue: "显示方式: 字符串" })}
+            style={{ fontStyle: "italic", fontWeight: "bold" }}
+          >
+            Abc
+          </button>
+          <button
+            className={`btn-toolbar-toggle ${showHex ? "active" : ""}`}
+            onClick={() => setShowHex(true)}
+            title={t("terminal.displayModeHex", { defaultValue: "显示方式: 十六进制" })}
+          >
+            Hex
+          </button>
+
+          <span className="toolbar-divider" />
+
+          {/* Rx 过滤 */}
+          <button
+            className={`btn-toolbar-toggle ${showRx ? "active-rx" : ""}`}
+            onClick={() => setShowRx(prev => !prev)}
+            title={t("terminal.showRxTitle", { defaultValue: "当前: 显示接收数据" })}
+          >
+            Rx
+          </button>
+          {/* Tx 过滤 */}
+          <button
+            className={`btn-toolbar-toggle ${showTx ? "active-tx" : ""}`}
+            onClick={() => setShowTx(prev => !prev)}
+            title={t("terminal.showTxTitle", { defaultValue: "当前: 显示已发送数据" })}
+          >
+            Tx
+          </button>
+
+          <span className="toolbar-divider" />
+
+          {/* 字体大小控制 */}
+          <span className="toolbar-label-t" title={t("terminal.fontSize", { defaultValue: "字体大小" })}>T</span>
+          <button
+            className="btn-toolbar-action"
+            onClick={() => setFontSize(prev => Math.min(20, prev + 1))}
+            title={t("terminal.fontSizeIncrease", { defaultValue: "增大字号" })}
+            style={{ padding: "0 6px", minWidth: "18px" }}
+          >
+            +
+          </button>
+          <button
+            className="btn-toolbar-action"
+            onClick={() => setFontSize(prev => Math.max(10, prev - 1))}
+            title={t("terminal.fontSizeDecrease", { defaultValue: "减小字号" })}
+            style={{ padding: "0 6px", minWidth: "18px" }}
+          >
+            -
+          </button>
+
+          <span className="toolbar-divider" />
+
+          {/* 编码选择 */}
           <select 
             value={encoding} 
             onChange={(e) => setEncoding(e.target.value as "utf-8" | "gbk")} 
-            className="line-ending-select" 
-            style={{ height: "24px", padding: "0 6px", fontSize: "10px", width: "auto" }}
-            title={t("terminal.encodingTitle", { defaultValue: "终端解码字符集" })}
+            className="toolbar-select" 
+            title={t("terminal.encodingTitle", { defaultValue: "编码格式" })}
           >
             <option value="utf-8">UTF-8</option>
-            <option value="gbk">GBK (GB2312)</option>
+            <option value="gbk">GBK</option>
           </select>
-          <label><input type="checkbox" checked={showTimestamp} onChange={(e) => setShowTimestamp(e.target.checked)} /> {t("terminal.showTimestamp", { defaultValue: "时间戳" })}</label>
-          <label><input type="checkbox" checked={showHex} onChange={(e) => setShowHex(e.target.checked)} /> HEX</label>
-          <button onClick={onClearLogs}>{t("terminal.clear", { defaultValue: "清空" })}</button>
-          <button onClick={() => onExportLogs(showTimestamp, showHex, encoding)}>{t("terminal.export", { defaultValue: "导出" })}</button>
+
+          <span className="toolbar-divider" />
+
+          <label style={{ fontSize: "11px", display: "flex", alignItems: "center", gap: "4px", color: "var(--text-secondary)", cursor: "pointer", userSelect: "none" }}>
+            <input type="checkbox" checked={showTimestamp} onChange={(e) => setShowTimestamp(e.target.checked)} /> 
+            {t("terminal.showTimestamp", { defaultValue: "时间戳" })}
+          </label>
+          <button className="btn-small" onClick={onClearLogs}>{t("terminal.clear", { defaultValue: "清空" })}</button>
+          <button className="btn-small" onClick={() => onExportLogs(showTimestamp, showHex, encoding)}>{t("terminal.export", { defaultValue: "导出" })}</button>
         </div>
       </div>
-      <div className="log-container" ref={logContainerRef} role="log" aria-live="polite">
-        {logs.map((log) => {
-          const display = log.data || (showHex ? log.hex : decodeLogEntry(log.hex, log.ascii, encoding));
-          const byteLen = log.hex ? log.hex.split(" ").filter(Boolean).length : 0;
-          return (
-            <div key={log.id} className={`log-entry log-${log.direction.toLowerCase()}`}>
-              <span className="log-dir">{log.direction}</span>
-              <span className="log-data">
-                {showTimestamp && <span className="log-time" style={{ color: "var(--text-muted)", marginRight: "6px" }}>[{log.timestamp}]</span>}
-                {display}
-                {log.hex && <span className="log-len" style={{ color: "var(--text-muted)", marginLeft: "6px" }}>[{byteLen}B]</span>}
-              </span>
-            </div>
-          );
-        })}
+      {/* 备注：使用 react-window 虚拟列表替代原始 DOM 列表，仅渲染可见行 */}
+      <div 
+        className="log-container" 
+        ref={logContainerRef} 
+        role="log" 
+        aria-live="polite"
+        style={{ fontSize: `${fontSize}px` }}
+      >
+        <List<any>
+          listRef={listRef}
+          rowCount={filteredLogs.length}
+          rowHeight={LOG_ROW_HEIGHT}
+          rowComponent={LogRow}
+          rowProps={{}}
+          overscanCount={20}
+        />
       </div>
       <div className="send-area">
         <div className="send-controls">

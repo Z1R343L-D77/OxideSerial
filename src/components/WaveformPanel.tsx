@@ -62,7 +62,7 @@ function clampIndex(index: number, length: number): number {
 
 type ViewMode = "auto" | "browse";
 
-export function WaveformPanel() {
+export function WaveformPanel({ theme }: { theme: string }) {
   const { t } = useTranslation();
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<uPlot | null>(null);
@@ -165,6 +165,10 @@ export function WaveformPanel() {
 
     if (totalPointsValRef.current) {
       totalPointsValRef.current.textContent = `${total} / ${bufferLimit}`;
+      const parentItem = totalPointsValRef.current.closest(".info-item");
+      if (parentItem) {
+        parentItem.setAttribute("title", `当前缓冲区有效数据: ${total}/ch`);
+      }
     }
 
     if (total === 0) {
@@ -208,6 +212,10 @@ export function WaveformPanel() {
     const visibleCount = Math.max(0, idxMax - idxMin + 1);
     if (visiblePointsValRef.current) {
       visiblePointsValRef.current.textContent = String(visibleCount);
+      const parentItem = visiblePointsValRef.current.closest(".info-item");
+      if (parentItem) {
+        parentItem.setAttribute("title", `当前屏幕可视区域数据点数: ${visibleCount}`);
+      }
     }
 
     const visibleDuration = xScale.max - xScale.min;
@@ -220,6 +228,10 @@ export function WaveformPanel() {
     }
     if (timeDivValRef.current) {
       timeDivValRef.current.textContent = timeDivText;
+      const parentItem = timeDivValRef.current.closest(".info-item");
+      if (parentItem) {
+        parentItem.setAttribute("title", `时间轴网格间距分度值: ${timeDivText}`);
+      }
     }
 
     const trackWidth = track.clientWidth;
@@ -570,9 +582,18 @@ export function WaveformPanel() {
                 chColor = CHANNEL_COLORS[closestChIdx % CHANNEL_COLORS.length];
                 closestText = `最近: CH${closestChIdx + 1} (X: ${fmtTime(timestamps[dataIndex])}, Y: ${fmtValue(val)}) | `;
                 closestHtml = `
-                  <div class="tooltip-ch" style="color: ${chColor}">CH${closestChIdx + 1}</div>
-                  <div class="tooltip-coord">X: ${fmtTime(timestamps[dataIndex])}</div>
-                  <div class="tooltip-coord">Y: ${fmtValue(val)}</div>
+                  <div class="tooltip-ch" style="color: ${chColor}">
+                    <span class="tooltip-ch-dot" style="background-color: ${chColor}"></span>
+                    CH${closestChIdx + 1}
+                  </div>
+                  <div class="tooltip-coord">
+                    <span class="label">${t("waveform.tooltipTime", { defaultValue: "时间" })}</span>
+                    <span class="value">${fmtTime(timestamps[dataIndex])}</span>
+                  </div>
+                  <div class="tooltip-coord">
+                    <span class="label">${t("waveform.tooltipValue", { defaultValue: "数值" })}</span>
+                    <span class="value" style="color: ${chColor}">${fmtValue(val)}</span>
+                  </div>
                 `;
               }
 
@@ -591,11 +612,11 @@ export function WaveformPanel() {
                 const containerHeight = el.clientHeight;
 
                 // 边界检测，防溢出
-                if (tooltipX + 130 > containerWidth) {
-                  tooltipX = left + plot.bbox.left - 145;
+                if (tooltipX + 160 > containerWidth) {
+                  tooltipX = left + plot.bbox.left - 175;
                 }
-                if (tooltipY + 70 > containerHeight) {
-                  tooltipY = top + plot.bbox.top - 75;
+                if (tooltipY + 80 > containerHeight) {
+                  tooltipY = top + plot.bbox.top - 95;
                 }
 
                 tooltipRef.current.style.display = "block";
@@ -625,7 +646,34 @@ export function WaveformPanel() {
     if (bufferRef.current.timestamps.length > 0) {
       renderChart(true);
     }
-  }, [renderChart, hiddenChannels, t, updateScrollbarAndInfo]);
+  }, [renderChart, hiddenChannels, t, updateScrollbarAndInfo, theme]);
+
+  // 备注：当手动切换主题时重新创建图表，使网格与坐标轴颜色同步更新
+  useEffect(() => {
+    if (chartRef.current && channelCount > 0) {
+      setTimeout(() => {
+        if (chartRef.current && channelCount > 0) {
+          initChart(channelCount);
+        }
+      }, 50);
+    }
+  }, [theme, channelCount, initChart]);
+
+  // 备注：当系统主题（深色/浅色模式）改变时同步更新图表颜色
+  useEffect(() => {
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    const handler = () => {
+      if (chartRef.current && channelCount > 0) {
+        setTimeout(() => {
+          if (chartRef.current && channelCount > 0) {
+            initChart(channelCount);
+          }
+        }, 50);
+      }
+    };
+    media.addEventListener("change", handler);
+    return () => media.removeEventListener("change", handler);
+  }, [channelCount, initChart]);
 
   useEffect(() => {
     const chart = chartRef.current;
@@ -969,7 +1017,8 @@ export function WaveformPanel() {
           <button 
             className="btn-clear-trash" 
             onClick={handleClear}
-            title={t("waveform.clear", { defaultValue: "清空缓存" })}
+            onContextMenu={(e) => e.preventDefault()}
+            title={t("waveform.clearTooltip", { defaultValue: "左键: 清空采样数据\n右键: 设置不弹出警告" })}
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <polyline points="3 6 5 6 21 6"></polyline>
@@ -978,21 +1027,24 @@ export function WaveformPanel() {
               <line x1="14" y1="11" x2="14" y2="17"></line>
             </svg>
           </button>
-          <span className="info-item">
+          <span className="info-item" title={t("waveform.bufferActiveTooltip", { defaultValue: "当前缓冲区有效数据: 0/ch" })}>
             <span ref={totalPointsValRef} className="info-label-value">0 / {bufferLimit}</span>
           </span>
           <span className="info-divider">|</span>
-          <span className="info-item">
+          <span className="info-item" title={t("waveform.visiblePointsTooltip", { defaultValue: "当前屏幕可视区域数据点数" })}>
             <span ref={visiblePointsValRef} className="info-label-value">0</span>
           </span>
           <span className="info-divider">|</span>
-          <span className="info-item">
+          <span className="info-item" title={t("waveform.timeDivTooltip", { defaultValue: "时间轴网格间距分度值 (X-div)" })}>
             <span ref={timeDivValRef} className="info-label-value">--/X-div</span>
           </span>
         </div>
         {/* 备注：状态栏 - 可调参数 */}
         <div className="waveform-statusbar">
-          <label className="statusbar-item">
+          <label 
+            className="statusbar-item"
+            title={t("waveform.deltaTTooltip", { defaultValue: "设置波形刷新渲染的最小间隔时间（毫秒），数值越小刷新频率越高，默认为 50ms (20Hz)" })}
+          >
             {t("waveform.deltaT", { defaultValue: "△t" })}:
             <input
               type="number"
@@ -1006,7 +1058,10 @@ export function WaveformPanel() {
               ({(1000 / deltaT).toFixed(1)} Hz)
             </span>
           </label>
-          <label className="statusbar-item">
+          <label 
+            className="statusbar-item"
+            title={t("waveform.bufferLimitTooltip", { defaultValue: "设置每个通道在内存中保留的最大采样点数，超出上限的老数据将被淘汰，默认为 50000" })}
+          >
             {t("waveform.bufferLimit", { defaultValue: "缓冲区上限" })}:
             <input
               type="number"
@@ -1018,7 +1073,10 @@ export function WaveformPanel() {
             />
             {t("waveform.perChannel", { defaultValue: "/ch" })}
           </label>
-          <label className="statusbar-item">
+          <label 
+            className="statusbar-item"
+            title={t("waveform.autoPointsTooltip", { defaultValue: "设定在 Auto 模式下 X 轴可视区域内能容纳显示的数据点个数，默认为 100" })}
+          >
             {t("waveform.autoPoints", { defaultValue: "Auto点数对齐" })}:
             <input
               type="number"

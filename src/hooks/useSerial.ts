@@ -17,20 +17,55 @@ export function useSerial(
   useEffect(() => { addTextLogRef.current = addTextLog; }, [addTextLog]);
 
   const [ports, setPorts] = useState<string[]>([]);
-  const [serialConfig, setSerialConfig] = useState<SerialConfig>({
-    port_name: "",
-    baud_rate: 115200,
-    data_bits: 8,
-    stop_bits: 1,
-    parity: "none",
-    protocol: "FireWater",
+  const [serialConfig, setSerialConfigRaw] = useState<SerialConfig>(() => {
+    const defaults: SerialConfig = {
+      mode: "serial",
+      port_name: "",
+      baud_rate: 115200,
+      data_bits: 8,
+      stop_bits: 1,
+      parity: "none",
+      protocol: "FireWater",
+      udp_remote_ip: "127.0.0.1",
+      udp_remote_port: 1346,
+      udp_local_port: 1347,
+      tcp_client_ip: "127.0.0.1",
+      tcp_client_port: 1346,
+      tcp_client_handshake: "",
+      tcp_server_port: 1347,
+    };
+    try {
+      const saved = localStorage.getItem("serial-config");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        // 备注：port_name 不持久化，因为物理串口可能已变化
+        return { ...defaults, ...parsed, port_name: "" };
+      }
+    } catch { /* ignore */ }
+    return defaults;
   });
+
+  // 备注：包装 setSerialConfig 自动持久化
+  const setSerialConfig = useCallback((updater: SerialConfig | ((prev: SerialConfig) => SerialConfig)) => {
+    setSerialConfigRaw((prev) => {
+      const next = typeof updater === "function" ? updater(prev) : updater;
+      try {
+        // 备注：排除 port_name 持久化
+        const { port_name: _, ...rest } = next;
+        localStorage.setItem("serial-config", JSON.stringify(rest));
+      } catch { /* ignore */ }
+      return next;
+    });
+  }, []);
   const [status, setStatus] = useState<SerialStatus>({
     connected: false,
     port_name: "",
     baud_rate: 0,
+    mode: "serial",
   });
   const [byteStats, setByteStats] = useState<[number, number]>([0, 0]);
+  const [tcpClients, setTcpClients] = useState<string[]>([]);
+  const [selectedTcpClient, setSelectedTcpClient] = useState<string>("all");
 
   // 监听 protocol 变更以同步到后端（支持动态切换协议）
   useEffect(() => {
@@ -40,23 +75,50 @@ export function useSerial(
     }
   }, [serialConfig.protocol, status.connected, addTextLog]);
 
-  // 备注：监听串口数据事件（通过 ref 读取回调，不随 locale 重建）
+  // 同步 TCP Server 目标 client
+  useEffect(() => {
+    if (status.connected && status.mode === "tcp_server") {
+      invoke("set_active_tcp_client", { clientAddr: selectedTcpClient === "all" ? null : selectedTcpClient })
+        .catch((e) => addTextLog("ERROR", `同步发送目标客户端失败: ${e}`));
+    }
+  }, [selectedTcpClient, status.connected, status.mode, addTextLog]);
+
+  // 备注：监听数据与连接事件
   useEffect(() => {
     const unlisten1 = listen<TerminalData>("serial-data", (event) => {
       const d = event.payload;
       addLogRef.current(d.direction, d.hex, d.ascii, d.timestamp);
     });
 
-    // R1: 串口断开检测
     const unlisten3 = listen<string>("serial-error", (event) => {
-      addTextLogRef.current("ERROR", `串口错误: ${event.payload}`);
-      setStatus({ connected: false, port_name: "", baud_rate: 0 });
+      addTextLogRef.current("ERROR", `连接错误: ${event.payload}`);
+      setStatus({ connected: false, port_name: "", baud_rate: 0, mode: "serial" });
+      setTcpClients([]);
+      setSelectedTcpClient("all");
       void invoke("close_port").catch(() => { });
+    });
+
+    const unlistenTcp = listen<string[]>("tcp-clients-changed", (event) => {
+      setTcpClients(event.payload);
+    });
+
+    // 备注：TCP 客户端自动重连事件
+    const unlistenReconnecting = listen<string>("serial-reconnecting", (event) => {
+      addTextLogRef.current("INFO", `${event.payload}`);
+      setStatus((prev) => ({ ...prev, reconnecting: true }));
+    });
+
+    const unlistenReconnected = listen<string>("serial-reconnected", (event) => {
+      addTextLogRef.current("INFO", `${event.payload}`);
+      setStatus((prev) => ({ ...prev, connected: true, reconnecting: false }));
     });
 
     return () => {
       void unlisten1.then((fn) => fn());
       void unlisten3.then((fn) => fn());
+      void unlistenTcp.then((fn) => fn());
+      void unlistenReconnecting.then((fn) => fn());
+      void unlistenReconnected.then((fn) => fn());
     };
   }, []);
 
@@ -85,13 +147,15 @@ export function useSerial(
     }
   }, [addTextLog, t]);
 
-  // 备注：打开/关闭串口
+  // 备注：打开/关闭连接
   const togglePort = useCallback(async () => {
     if (status.connected) {
       try {
         await invoke("close_port");
-        setStatus({ connected: false, port_name: "", baud_rate: 0 });
-        addTextLog("INFO", t("serial.portClosed", { defaultValue: "串口已关闭" }));
+        setStatus({ connected: false, port_name: "", baud_rate: 0, mode: "serial" });
+        setTcpClients([]);
+        setSelectedTcpClient("all");
+        addTextLog("INFO", t("serial.portClosed", { defaultValue: "连接已关闭" }));
       } catch (e) {
         addTextLog("ERROR", `${e}`);
       }
@@ -99,7 +163,15 @@ export function useSerial(
       try {
         const result = await invoke<SerialStatus>("open_port", { config: serialConfig });
         setStatus(result);
-        addTextLog("INFO", `${t("status.connected", { defaultValue: "已连接" })}: ${serialConfig.port_name} @ ${serialConfig.baud_rate}`);
+        if (serialConfig.mode === "serial") {
+          addTextLog("INFO", `${t("status.connected", { defaultValue: "已连接" })}: ${serialConfig.port_name} @ ${serialConfig.baud_rate}`);
+        } else if (serialConfig.mode === "udp") {
+          addTextLog("INFO", `${t("status.connected", { defaultValue: "UDP 绑定成功" })}: 远程 ${serialConfig.udp_remote_ip}:${serialConfig.udp_remote_port} | 本地端口 :${serialConfig.udp_local_port}`);
+        } else if (serialConfig.mode === "tcp_client") {
+          addTextLog("INFO", `${t("status.connected", { defaultValue: "TCP 客户端连接成功" })}: ${serialConfig.tcp_client_ip}:${serialConfig.tcp_client_port}`);
+        } else if (serialConfig.mode === "tcp_server") {
+          addTextLog("INFO", `${t("status.connected", { defaultValue: "TCP 服务端启动成功" })}: 监听 :${serialConfig.tcp_server_port}`);
+        }
       } catch (e) {
         addTextLog("ERROR", `${e}`);
       }
@@ -120,6 +192,9 @@ export function useSerial(
     setSerialConfig,
     status,
     byteStats,
+    tcpClients,
+    selectedTcpClient,
+    setSelectedTcpClient,
     refreshPorts,
     togglePort,
   };

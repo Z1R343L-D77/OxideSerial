@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap');
+
 * {
   margin: 0;
   padding: 0;
@@ -21,11 +23,12 @@
   --warning: #d4a948;
   --danger: #e87462;
   --purple: #b08de0;
-  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.2);
-  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.25);
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.12);
+  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.22);
+  --shadow-lg: 0 16px 40px rgba(0, 0, 0, 0.3);
   --glow-accent: 0 0 0 2px rgba(232, 168, 73, 0.25);
   --glow-success: 0 0 0 2px rgba(95, 192, 133, 0.2);
-  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-out: cubic-bezier(0.25, 0.8, 0.25, 1);
 }
 
 /* 备注：亮色主题（宣纸暖白基调） */
@@ -42,8 +45,9 @@
   --warning: #9a6700;
   --danger: #c45c4a;
   --purple: #8b6bb5;
-  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.06);
-  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
+  --shadow-sm: 0 2px 8px rgba(26, 26, 24, 0.03);
+  --shadow-md: 0 8px 24px rgba(26, 26, 24, 0.06);
+  --shadow-lg: 0 16px 40px rgba(26, 26, 24, 0.1);
   --glow-accent: 0 0 0 2px rgba(184, 134, 11, 0.2);
   --glow-success: 0 0 0 2px rgba(45, 90, 61, 0.15);
 }
@@ -53,7 +57,7 @@
 @keyframes fade-up {
   from {
     opacity: 0;
-    transform: translateY(14px);
+    transform: translateY(10px);
   }
 
   to {
@@ -65,7 +69,7 @@
 @keyframes scale-in {
   from {
     opacity: 0;
-    transform: scale(0.95);
+    transform: scale(0.96);
   }
 
   to {
@@ -92,7 +96,7 @@
   }
 
   50% {
-    opacity: 0.6;
+    opacity: 0.65;
   }
 }
 
@@ -126,8 +130,8 @@
 /* ========== 滚动条 ========== */
 
 ::-webkit-scrollbar {
-  width: 4px;
-  height: 4px;
+  width: 5px;
+  height: 5px;
 }
 
 ::-webkit-scrollbar-track {
@@ -135,29 +139,31 @@
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--text-muted);
-  border-radius: 2px;
+  background: var(--border);
+  border-radius: 10px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--text-secondary);
+  background: var(--text-muted);
 }
 
 * {
   scrollbar-width: thin;
-  scrollbar-color: var(--text-muted) transparent;
+  scrollbar-color: var(--border) transparent;
 }
 
 /* ========== 全局 ========== */
 
 body {
-  font-family: "HarmonyOS Sans SC", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-family: 'Inter', "HarmonyOS Sans SC", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
   background: var(--bg-primary);
   color: var(--text-primary);
   width: 100vw;
   height: 100vh;
   overflow: hidden;
   transition: background 0.35s, color 0.35s;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 .app {
@@ -174,7 +180,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 16px;
+  padding: 10px 20px;
   background: var(--bg-secondary);
   border-bottom: 1px solid var(--border);
   -webkit-app-region: drag;
@@ -190,48 +196,50 @@ body {
   right: 0;
   height: 1px;
   background: linear-gradient(90deg, transparent, var(--accent), transparent);
-  opacity: 0.3;
+  opacity: 0.4;
 }
 
 .header h1 {
-  font-size: 15px;
-  font-weight: 700;
-  background: linear-gradient(135deg, var(--accent), #d4a948);
+  font-family: 'Outfit', sans-serif;
+  font-size: 16px;
+  font-weight: 800;
+  background: linear-gradient(135deg, var(--accent), #f4bd5f);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.8px;
 }
 
 .header-left {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 16px;
 }
 
 .header-right {
   -webkit-app-region: no-drag;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
 }
 
 /* ========== 状态指示器 ========== */
 
 .status-indicator {
+  font-family: 'Fira Code', 'Consolas', monospace;
   font-size: 11px;
   color: var(--text-secondary);
-  padding: 3px 10px;
-  border-radius: 12px;
+  padding: 4px 12px;
+  border-radius: 20px;
   background: var(--bg-tertiary);
   border: 1px solid var(--border);
-  transition: all 0.3s ease-out;
+  transition: all 0.3s var(--ease-out);
 }
 
 .status-indicator.connected {
   color: var(--success);
-  background: rgba(95, 192, 133, 0.12);
-  border-color: rgba(95, 192, 133, 0.3);
+  background: rgba(95, 192, 133, 0.1);
+  border-color: rgba(95, 192, 133, 0.25);
   animation: pulse-soft 3s ease-in-out infinite;
 }
 
@@ -239,9 +247,9 @@ body {
 
 .view-tabs {
   display: flex;
-  gap: 2px;
+  gap: 3px;
   background: var(--bg-tertiary);
-  border-radius: 8px;
+  border-radius: 10px;
   padding: 3px;
   border: 1px solid var(--border);
 }
@@ -251,16 +259,20 @@ body {
   border: none;
   color: var(--text-secondary);
   font-size: 11px;
-  padding: 5px 12px;
-  border-radius: 6px;
+  padding: 6px 14px;
+  border-radius: 8px;
   cursor: pointer;
-  transition: all 0.2s ease-out;
+  transition: all 0.25s var(--ease-out);
   position: relative;
 }
 
 .view-tabs button:hover:not(.active) {
   color: var(--text-primary);
   background: rgba(255, 255, 255, 0.04);
+}
+
+[data-theme="light"] .view-tabs button:hover:not(.active) {
+  background: rgba(0, 0, 0, 0.02);
 }
 
 .view-tabs button.active {
@@ -276,11 +288,14 @@ body {
   background: transparent;
   border: 1px solid var(--border);
   color: var(--text-secondary);
-  font-size: 16px;
-  padding: 5px 10px;
-  border-radius: 8px;
+  font-size: 15px;
+  padding: 6px 12px;
+  border-radius: 10px;
   cursor: pointer;
-  transition: all 0.2s ease-out;
+  transition: all 0.25s var(--ease-out);
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .btn-settings:hover {
@@ -381,7 +396,7 @@ body {
   display: flex;
   gap: 3px;
   background: var(--bg-tertiary);
-  border-radius: 8px;
+  border-radius: 10px;
   padding: 3px;
   border: 1px solid var(--border);
 }
@@ -393,9 +408,9 @@ body {
   color: var(--text-secondary);
   font-size: 11px;
   padding: 7px 10px;
-  border-radius: 6px;
+  border-radius: 8px;
   cursor: pointer;
-  transition: all 0.2s ease-out;
+  transition: all 0.25s var(--ease-out);
 }
 
 .segmented-control button.active {
@@ -408,6 +423,10 @@ body {
 .segmented-control button:hover:not(.active) {
   color: var(--text-primary);
   background: rgba(255, 255, 255, 0.03);
+}
+
+[data-theme="light"] .segmented-control button:hover:not(.active) {
+  background: rgba(0, 0, 0, 0.02);
 }
 
 /* ========== 开关行 ========== */
@@ -470,6 +489,7 @@ body {
 }
 
 .about-name {
+  font-family: 'Outfit', sans-serif;
   font-size: 15px;
   font-weight: 700;
   margin-bottom: 6px;
@@ -483,6 +503,7 @@ body {
 }
 
 .about-tech {
+  font-family: 'Fira Code', 'Consolas', monospace;
   font-size: 10px;
   color: var(--text-muted);
 }
@@ -507,23 +528,25 @@ body {
 .panel {
   background: var(--bg-primary);
   border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 12px;
+  border-radius: 14px;
+  padding: 14px;
   box-shadow: var(--shadow-sm);
-  transition: box-shadow 0.2s ease-out;
+  transition: all 0.25s var(--ease-out);
 }
 
 .panel:hover {
   box-shadow: var(--shadow-md);
+  border-color: color-mix(in srgb, var(--border) 70%, var(--accent));
 }
 
 .panel h3 {
-  font-size: 10px;
+  font-family: 'Outfit', sans-serif;
+  font-size: 11px;
   font-weight: 700;
   color: var(--text-muted);
-  margin-bottom: 10px;
+  margin-bottom: 12px;
   text-transform: uppercase;
-  letter-spacing: 1px;
+  letter-spacing: 1.2px;
 }
 
 /* ========== 表单 ========== */
@@ -531,14 +554,14 @@ body {
 .form-group {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  margin-bottom: 8px;
+  gap: 6px;
+  margin-bottom: 10px;
 }
 
 .form-group label {
-  font-size: 10px;
+  font-size: 10.5px;
   color: var(--text-muted);
-  font-weight: 500;
+  font-weight: 600;
 }
 
 .form-row {
@@ -551,16 +574,17 @@ body {
 }
 
 select,
-input[type="number"] {
+input[type="number"],
+input[type="text"] {
   background: var(--bg-tertiary);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 10px;
   color: var(--text-primary);
-  padding: 6px 8px;
+  padding: 6px 10px;
   font-size: 11px;
   outline: none;
   width: 100%;
-  transition: all 0.2s ease-out;
+  transition: all 0.25s var(--ease-out);
 }
 
 select:focus,
@@ -585,14 +609,15 @@ input:hover {
 }
 
 .sidebar select,
-.sidebar input[type="number"] {
+.sidebar input[type="number"],
+.sidebar input[type="text"] {
   height: 32px;
 }
 
 .port-row button {
   background: var(--bg-tertiary);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 10px;
   color: var(--text-secondary);
   width: 32px;
   height: 32px;
@@ -601,7 +626,7 @@ input:hover {
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: all 0.2s var(--ease-out);
+  transition: all 0.25s var(--ease-out);
 }
 
 .port-row button:hover {
@@ -626,10 +651,10 @@ button {
   cursor: pointer;
   font-size: 11px;
   border: none;
-  border-radius: 8px;
+  border-radius: 10px;
   padding: 7px 12px;
   font-weight: 600;
-  transition: all 0.2s ease-out;
+  transition: all 0.25s var(--ease-out);
 }
 
 button:active {
@@ -641,11 +666,12 @@ button:active {
   background: linear-gradient(135deg, var(--success), #4aad6e);
   color: white;
   margin-top: 6px;
-  border-radius: 8px;
+  border-radius: 10px;
   padding: 8px 12px;
   font-size: 12px;
   letter-spacing: 0.3px;
   box-shadow: 0 2px 8px rgba(95, 192, 133, 0.25);
+  transition: all 0.25s var(--ease-out);
 }
 
 .btn-connect:hover {
@@ -676,7 +702,9 @@ button:active {
   color: white;
   padding: 8px 12px;
   font-size: 12px;
+  border-radius: 10px;
   box-shadow: 0 2px 8px rgba(232, 168, 73, 0.25);
+  transition: all 0.25s var(--ease-out);
 }
 
 .btn-modbus:hover {
@@ -701,7 +729,9 @@ button:active {
   align-items: center;
   justify-content: center;
   padding: 0 16px;
+  border-radius: 10px;
   box-shadow: 0 2px 8px rgba(176, 141, 224, 0.25);
+  transition: all 0.25s var(--ease-out);
 }
 
 .btn-send:hover {
@@ -751,21 +781,22 @@ button:active {
 }
 
 .waveform-title {
-  font-size: 10px;
-  font-weight: 700;
+  font-family: 'Outfit', sans-serif;
+  font-size: 11px;
+  font-weight: 800;
   color: var(--accent);
   text-transform: uppercase;
   letter-spacing: 1px;
 }
 
 .waveform-channels {
-  font-size: 10px;
+  font-size: 10.5px;
   color: var(--text-muted);
   flex: 1;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  font-family: "Consolas", "Monaco", monospace;
+  font-family: 'Fira Code', "Consolas", "Monaco", monospace;
 }
 
 .btn-small {
@@ -774,8 +805,8 @@ button:active {
   background: var(--bg-tertiary);
   color: var(--text-primary);
   border: 1px solid var(--border);
-  border-radius: 6px;
-  transition: all 0.2s ease-out;
+  border-radius: 8px;
+  transition: all 0.25s var(--ease-out);
 }
 
 .btn-small:hover {
@@ -818,12 +849,12 @@ button:active {
   display: flex;
   align-items: center;
   gap: 20px;
-  padding: 5px 12px;
+  padding: 6px 12px;
   background: var(--bg-secondary);
   border-top: 1px solid var(--border);
-  font-size: 10px;
-  color: var(--text-muted);
-  font-family: "Consolas", "Monaco", monospace;
+  font-size: 11px;
+  color: var(--text-secondary);
+  font-family: 'Fira Code', "Consolas", "Monaco", monospace;
   flex-shrink: 0;
 }
 
@@ -835,17 +866,17 @@ button:active {
 }
 
 .statusbar-input {
-  width: 60px;
-  padding: 2px 6px;
+  width: 64px;
+  padding: 3px 6px;
   background: var(--bg-tertiary);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: 8px;
   color: var(--text-primary);
-  font-size: 10px;
-  font-family: "Consolas", "Monaco", monospace;
+  font-size: 10.5px;
+  font-family: 'Fira Code', "Consolas", "Monaco", monospace;
   text-align: center;
   outline: none;
-  transition: all 0.2s ease-out;
+  transition: all 0.25s var(--ease-out);
 }
 
 .statusbar-input:focus {
@@ -895,7 +926,7 @@ button:active {
   font-size: 10px;
   padding: 4px 10px;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: 8px;
 }
 
 .terminal-controls button:hover {
@@ -907,15 +938,17 @@ button:active {
 
 .log-container {
   flex: 1;
-  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   background: var(--bg-primary);
   border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 8px;
-  font-family: "Consolas", "Monaco", "Courier New", monospace;
+  border-radius: 12px;
+  padding: 10px;
+  font-family: 'Fira Code', "Consolas", "Monaco", "Courier New", monospace;
   font-size: 11px;
   line-height: 1.6;
-  box-shadow: inset 0 1px 4px rgba(0, 0, 0, 0.06);
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.05);
 }
 
 .log-entry {
@@ -998,17 +1031,17 @@ button:active {
 
 .send-row textarea {
   flex: 1;
-  height: 36px;
+  height: 38px;
   background: var(--bg-primary);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 10px;
   color: var(--text-primary);
-  padding: 8px 10px;
-  font-family: "Consolas", monospace;
+  padding: 8px 12px;
+  font-family: 'Fira Code', "Consolas", monospace;
   font-size: 12px;
   resize: none;
   outline: none;
-  transition: all 0.2s ease-out;
+  transition: all 0.25s var(--ease-out);
 }
 
 .send-row textarea:focus {
@@ -1032,14 +1065,14 @@ button:active {
   height: 36px;
   background: var(--bg-tertiary);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 10px;
   color: var(--text-secondary);
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   padding: 0;
-  transition: all 0.2s var(--ease-out);
+  transition: all 0.25s var(--ease-out);
 }
 
 .btn-icon:hover {
@@ -1092,7 +1125,7 @@ button:active {
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: 12px;
   box-shadow: var(--shadow-md);
   z-index: 10;
   margin-bottom: 6px;
@@ -1102,7 +1135,7 @@ button:active {
 .history-item {
   padding: 6px 10px;
   font-size: 11px;
-  font-family: "Consolas", monospace;
+  font-family: 'Fira Code', "Consolas", monospace;
   color: var(--text-primary);
   cursor: pointer;
   border-bottom: 1px solid var(--border);
@@ -1124,13 +1157,13 @@ button:active {
 
 .line-ending-select {
   height: 36px;
-  padding: 0 4px;
+  padding: 0 6px;
   background: var(--bg-tertiary);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 10px;
   color: var(--text-primary);
   font-size: 10px;
-  font-family: "Consolas", monospace;
+  font-family: 'Fira Code', "Consolas", monospace;
   outline: none;
   cursor: pointer;
   transition: all 0.2s ease-out;
@@ -1160,7 +1193,7 @@ input[type="radio"] {
   font-size: 9px;
   font-weight: 600;
   color: var(--text-muted);
-  font-family: "Consolas", monospace;
+  font-family: 'Fira Code', "Consolas", monospace;
   padding: 1px 4px;
   background: var(--bg-tertiary);
   border: 1px solid var(--border);
@@ -1195,12 +1228,13 @@ input[type="radio"] {
   align-items: center;
   gap: 8px;
   padding: 12px;
+  font-family: 'Outfit', sans-serif;
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 800;
   color: var(--text-muted);
   border-bottom: 1px solid var(--border);
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.8px;
 }
 
 .waveform-sidebar-header svg {
@@ -1219,9 +1253,9 @@ input[type="radio"] {
   align-items: center;
   gap: 10px;
   padding: 6px 8px;
-  border-radius: 6px;
+  border-radius: 8px;
   background: transparent;
-  transition: background 0.2s var(--ease-out);
+  transition: background 0.25s var(--ease-out);
 }
 
 .waveform-sidebar-item:hover {
@@ -1241,8 +1275,8 @@ input[type="radio"] {
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 4px;
-  transition: all 0.2s var(--ease-out);
+  border-radius: 6px;
+  transition: all 0.25s var(--ease-out);
 }
 
 .btn-visibility:hover {
@@ -1258,46 +1292,106 @@ input[type="radio"] {
   font-size: 11px;
   font-weight: 600;
   flex: 1;
-  font-family: "Consolas", monospace;
+  font-family: 'Fira Code', "Consolas", monospace;
 }
 
 .waveform-sidebar-item .channel-value {
   font-size: 11px;
   font-weight: 700;
-  font-family: "Consolas", monospace;
+  font-family: 'Fira Code', "Consolas", monospace;
   text-align: right;
 }
 
 /* ========== 悬浮提示框 (Tooltip) ========== */
 .waveform-tooltip {
+  min-width: 150px;
   background: rgba(30, 29, 28, 0.85);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 6px 10px;
-  font-family: "Consolas", monospace;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 10px 14px;
+  font-family: 'Fira Code', "Consolas", monospace;
   font-size: 11px;
   color: var(--text-primary);
-  box-shadow: var(--shadow-md);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.08);
   pointer-events: none;
-  transition: opacity 0.1s var(--ease-out);
+  z-index: 100;
+  transition: opacity 0.15s var(--ease-out);
 }
 
 [data-theme="light"] .waveform-tooltip {
   background: rgba(246, 243, 236, 0.9);
-  border-color: var(--border);
+  border: 1px solid rgba(0, 0, 0, 0.06);
   color: var(--text-primary);
+  box-shadow: 0 12px 32px rgba(26, 26, 24, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+
+/* ========== 全局自定义悬浮提示框 (Global App Tooltip) ========== */
+.global-app-tooltip {
+  max-width: 280px;
+  background: rgba(30, 29, 28, 0.92);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-family: 'Inter', "HarmonyOS Sans SC", -apple-system, sans-serif;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-primary);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  pointer-events: none;
+  z-index: 99999;
+  white-space: pre-line;
+  word-wrap: break-word;
+  animation: scale-in 0.15s var(--ease-out);
+}
+
+[data-theme="light"] .global-app-tooltip {
+  background: rgba(246, 243, 236, 0.95);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  color: var(--text-primary);
+  box-shadow: 0 8px 24px rgba(26, 26, 24, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.5);
 }
 
 .waveform-tooltip .tooltip-ch {
-  font-weight: 700;
-  margin-bottom: 2px;
+  font-family: 'Outfit', sans-serif;
+  font-weight: 800;
+  font-size: 13px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 6px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.waveform-tooltip .tooltip-ch-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+  box-shadow: 0 0 6px currentColor;
 }
 
 .waveform-tooltip .tooltip-coord {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--text-secondary);
+  margin-top: 4px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.waveform-tooltip .tooltip-coord .label {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.waveform-tooltip .tooltip-coord .value {
+  font-weight: 600;
 }
 
 /* ========== 左侧功能导航栏 (Function Sidebar Nav) ========== */
@@ -1366,7 +1460,7 @@ input[type="radio"] {
   margin-top: 10px;
   background: var(--bg-tertiary);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 12px;
   padding: 10px;
   max-height: 280px;
   overflow-y: auto;
@@ -1383,12 +1477,13 @@ input[type="radio"] {
 }
 
 .protocol-info-title {
-  font-weight: 700;
+  font-family: 'Outfit', sans-serif;
+  font-weight: 800;
   color: var(--accent);
   border-bottom: 1px solid var(--border);
   padding-bottom: 4px;
   font-size: 12px;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.8px;
 }
 
 .protocol-info-section {
@@ -1400,7 +1495,7 @@ input[type="radio"] {
 
 .protocol-info-section strong {
   color: var(--text-primary);
-  font-size: 10px;
+  font-size: 10.5px;
 }
 
 .protocol-info-section p {
@@ -1408,7 +1503,7 @@ input[type="radio"] {
 }
 
 .protocol-info-section code {
-  font-family: "Consolas", "Monaco", monospace;
+  font-family: 'Fira Code', "Consolas", "Monaco", monospace;
   background: rgba(0, 0, 0, 0.15);
   padding: 1px 4px;
   border-radius: 4px;
@@ -1422,9 +1517,9 @@ input[type="radio"] {
 .protocol-info-section pre.code-block {
   background: rgba(0, 0, 0, 0.25);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: 10px;
   padding: 6px 10px;
-  font-family: "Consolas", "Monaco", monospace;
+  font-family: 'Fira Code', "Consolas", "Monaco", monospace;
   font-size: 9.5px;
   overflow-x: auto;
   color: var(--text-primary);
@@ -1450,7 +1545,7 @@ input[type="radio"] {
   flex-direction: column;
   background: var(--bg-secondary);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: 16px;
   margin: 16px;
   overflow: hidden;
   box-shadow: var(--shadow-md);
@@ -1547,7 +1642,7 @@ input[type="radio"] {
   font-weight: 600;
   color: var(--text-secondary);
   border-bottom: 2px solid var(--border);
-  background: rgba(0, 0, 0, 0.05);
+  background: var(--bg-tertiary);
 }
 
 .modbus-monitor-table td {
@@ -1708,14 +1803,14 @@ input[type="radio"] {
 
 .btn-row-action {
   padding: 4px 10px;
-  border-radius: 4px;
+  border-radius: 6px;
   font-size: 11px;
   font-weight: 600;
   cursor: pointer;
   border: 1px solid var(--border);
   background: var(--bg-tertiary);
   color: var(--text-secondary);
-  transition: all 0.2s var(--ease-out);
+  transition: all 0.25s var(--ease-out);
 }
 
 .btn-row-action.write:hover:not(:disabled) {
@@ -1750,7 +1845,7 @@ input[type="radio"] {
 .write-modal-content {
   background: var(--bg-secondary);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: 16px;
   width: 420px;
   max-width: 90%;
   padding: 24px;
@@ -1768,6 +1863,7 @@ input[type="radio"] {
 }
 
 .write-modal-header h3 {
+  font-family: 'Outfit', sans-serif;
   font-size: 16px;
   font-weight: 600;
   color: var(--accent);
@@ -1792,7 +1888,7 @@ input[type="radio"] {
   font-size: 12px;
   background: var(--bg-tertiary);
   padding: 12px;
-  border-radius: 6px;
+  border-radius: 10px;
   border: 1px solid var(--border);
 }
 
@@ -1811,7 +1907,7 @@ input[type="radio"] {
   width: 100%;
   background: var(--bg-tertiary);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: 8px;
   color: var(--text-primary);
   padding: 8px 12px;
   font-size: 14px;
@@ -1836,11 +1932,11 @@ input[type="radio"] {
   background: transparent;
   border: 1px solid var(--danger);
   color: var(--danger);
-  border-radius: 6px;
+  border-radius: 8px;
   padding: 8px 16px;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s var(--ease-out);
+  transition: all 0.25s var(--ease-out);
 }
 
 .btn-danger-outline:hover:not(:disabled) {
@@ -1926,7 +2022,7 @@ input[type="radio"] {
   top: 3px;
   bottom: 3px;
   background: rgba(255, 255, 255, 0.03);
-  border-radius: 3px;
+  border-radius: 10px;
   border: 1px solid var(--border);
   cursor: pointer;
 }
@@ -1935,9 +2031,10 @@ input[type="radio"] {
   top: 0;
   bottom: 0;
   background: var(--border);
-  border-radius: 2px;
+  border-radius: 10px;
   cursor: grab;
   min-width: 16px;
+  transition: background 0.2s ease;
 }
 .waveform-scrollbar-thumb:hover {
   background: var(--accent);
@@ -1949,42 +2046,127 @@ input[type="radio"] {
 .waveform-info-bar {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 4px 12px;
-  background: var(--bg-secondary);
-  font-size: 10px;
-  color: var(--text-muted);
-  font-family: "Consolas", "Monaco", monospace;
+  gap: 16px;
+  padding: 6px 16px;
+  background: var(--bg-primary);
+  font-size: 11px;
+  color: var(--text-secondary);
+  font-family: 'Fira Code', "Consolas", "Monaco", monospace;
   flex-shrink: 0;
+  border-top: 1px solid var(--border);
   border-bottom: 1px solid var(--border);
-  height: 24px;
+  height: 28px;
 }
 .waveform-info-bar .info-item {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
+  padding: 2px 8px;
+  border-radius: 20px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  transition: all 0.25s var(--ease-out);
+}
+.waveform-info-bar .info-item:hover {
+  border-color: var(--accent);
+  color: var(--text-primary);
 }
 .waveform-info-bar .info-divider {
-  color: var(--border);
+  display: none;
 }
 .waveform-info-bar .info-label-value {
-  color: var(--text-secondary);
+  color: var(--text-primary);
+  font-weight: 600;
 }
 .waveform-info-bar .btn-clear-trash {
   background: transparent;
   border: none;
-  padding: 0;
+  padding: 4px;
+  border-radius: 6px;
   color: var(--text-muted);
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: color 0.15s;
+  transition: all 0.2s;
 }
 .waveform-info-bar .btn-clear-trash:hover {
   color: var(--danger);
+  background: rgba(232, 116, 98, 0.08);
 }
 .waveform-info-bar .btn-clear-trash svg {
   width: 12px;
   height: 12px;
+}
+
+/* ========== 终端底部控制栏工具按钮 ========== */
+.btn-toolbar-toggle, .btn-toolbar-action {
+  font-size: 11px;
+  padding: 3px 8px;
+  height: 24px;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  transition: all 0.25s var(--ease-out);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  user-select: none;
+  font-weight: 500;
+}
+.btn-toolbar-toggle:hover, .btn-toolbar-action:hover {
+  border-color: var(--text-muted);
+  color: var(--text-primary);
+}
+.btn-toolbar-toggle.active {
+  background: var(--bg-primary);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.btn-toolbar-toggle.active-rx {
+  border-color: rgba(95, 192, 133, 0.4);
+  color: var(--success);
+  background: rgba(95, 192, 133, 0.08);
+}
+.btn-toolbar-toggle.active-rx:hover {
+  border-color: var(--success);
+}
+.btn-toolbar-toggle.active-tx {
+  border-color: rgba(176, 141, 224, 0.4);
+  color: var(--purple);
+  background: rgba(176, 141, 224, 0.08);
+}
+.btn-toolbar-toggle.active-tx:hover {
+  border-color: var(--purple);
+}
+.toolbar-select {
+  height: 24px;
+  padding: 0 6px;
+  font-size: 11px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-secondary);
+  outline: none;
+  cursor: pointer;
+  width: auto;
+}
+.toolbar-select:hover {
+  border-color: var(--text-muted);
+}
+.toolbar-divider {
+  width: 1px;
+  height: 14px;
+  background: var(--border);
+  margin: 0 4px;
+}
+.toolbar-label-t {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 600;
+  margin: 0 2px 0 4px;
+  user-select: none;
 }

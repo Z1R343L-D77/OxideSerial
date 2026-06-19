@@ -1,26 +1,60 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import type { LogEntry } from "../types/serial";
 
+const MAX_LOGS = 2000;
+
 export function useTerminalLogs(locale: string) {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const logIdRef = useRef(0);
   const logContainerRef = useRef<HTMLDivElement>(null);
 
+  // 备注：RAF 节流缓冲队列 — 防止高速数据流造成 React 过度更新
+  const pendingLogs = useRef<LogEntry[]>([]);
+  const rafId = useRef<number | null>(null);
+
+  const flushPendingLogs = useCallback(() => {
+    rafId.current = null;
+    if (pendingLogs.current.length === 0) return;
+    const batch = pendingLogs.current;
+    pendingLogs.current = [];
+    setLogs((prev) => [...prev, ...batch].slice(-MAX_LOGS));
+  }, []);
+
+  const scheduleFlush = useCallback(() => {
+    if (rafId.current === null) {
+      rafId.current = requestAnimationFrame(flushPendingLogs);
+    }
+  }, [flushPendingLogs]);
+
+  // 备注：清理 RAF
+  useEffect(() => {
+    return () => {
+      if (rafId.current !== null) {
+        cancelAnimationFrame(rafId.current);
+      }
+    };
+  }, []);
+
   // 备注：添加串口数据日志（同时存储 hex 和 ascii，渲染时根据 showHex 切换）
   const addLog = useCallback((direction: string, hex: string, ascii: string, timestamp?: string) => {
     const id = ++logIdRef.current;
     const time = timestamp || new Date().toLocaleTimeString(locale, { hour12: false });
-    setLogs((prev) => [...prev.slice(-1999), { id, timestamp: time, direction, data: "", hex, ascii }]);
-  }, [locale]);
+    pendingLogs.current.push({ id, timestamp: time, direction, data: "", hex, ascii });
+    scheduleFlush();
+  }, [locale, scheduleFlush]);
 
   // 备注：添加普通日志（非串口数据，如 INFO/ERROR）
   const addTextLog = useCallback((direction: string, text: string) => {
     const id = ++logIdRef.current;
     const timestamp = new Date().toLocaleTimeString(locale, { hour12: false });
-    setLogs((prev) => [...prev.slice(-1999), { id, timestamp, direction, data: text, hex: "", ascii: text }]);
-  }, [locale]);
+    pendingLogs.current.push({ id, timestamp, direction, data: text, hex: "", ascii: text });
+    scheduleFlush();
+  }, [locale, scheduleFlush]);
 
-  const clearLogs = useCallback(() => setLogs([]), []);
+  const clearLogs = useCallback(() => {
+    pendingLogs.current = [];
+    setLogs([]);
+  }, []);
 
   // U7: 导出终端日志
   const exportLogs = useCallback(async (showTimestamp = true, showHex = false, encoding: "utf-8" | "gbk" = "utf-8") => {
