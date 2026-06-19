@@ -2,22 +2,19 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useTranslation } from "react-i18next";
-import type { SerialConfig, SerialStatus, TerminalData, DataFrame } from "../types/serial";
+import type { SerialConfig, SerialStatus, TerminalData } from "../types/serial";
 
 export function useSerial(
   addLog: (direction: string, hex: string, ascii: string) => void,
   addTextLog: (direction: string, text: string) => void,
-  onWaveformFrame: (frame: DataFrame) => void,
 ) {
   const { t } = useTranslation();
 
   // 备注：通过 ref 读取回调，避免 locale 变化重建事件监听器
   const addLogRef = useRef<(direction: string, hex: string, ascii: string, timestamp?: string) => void>(addLog);
   const addTextLogRef = useRef(addTextLog);
-  const onWaveformFrameRef = useRef(onWaveformFrame);
   useEffect(() => { addLogRef.current = addLog; }, [addLog]);
   useEffect(() => { addTextLogRef.current = addTextLog; }, [addTextLog]);
-  useEffect(() => { onWaveformFrameRef.current = onWaveformFrame; }, [onWaveformFrame]);
 
   const [ports, setPorts] = useState<string[]>([]);
   const [serialConfig, setSerialConfig] = useState<SerialConfig>({
@@ -50,10 +47,6 @@ export function useSerial(
       addLogRef.current(d.direction, d.hex, d.ascii, d.timestamp);
     });
 
-    const unlisten2 = listen<DataFrame>("waveform-data", (event) => {
-      onWaveformFrameRef.current(event.payload);
-    });
-
     // R1: 串口断开检测
     const unlisten3 = listen<string>("serial-error", (event) => {
       addTextLogRef.current("ERROR", `串口错误: ${event.payload}`);
@@ -63,7 +56,6 @@ export function useSerial(
 
     return () => {
       void unlisten1.then((fn) => fn());
-      void unlisten2.then((fn) => fn());
       void unlisten3.then((fn) => fn());
     };
   }, []);

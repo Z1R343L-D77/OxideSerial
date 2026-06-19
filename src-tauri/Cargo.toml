@@ -1,6 +1,6 @@
 [package]
 name = "oxide-serial"
-version = "0.2.0"
+version = "0.2.1"
 description = "Industrial-grade serial port debugger"
 authors = ["Z1R343L-D77"]
 license = "MIT"

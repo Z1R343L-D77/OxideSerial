@@ -8,6 +8,7 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import { save } from "@tauri-apps/plugin-dialog";
+import { listen } from "@tauri-apps/api/event";
 import uPlot from "uplot";
 import "uplot/dist/uPlot.min.css";
 
@@ -17,14 +18,9 @@ interface DataFrame {
   raw: string;
 }
 
-interface WaveformPanelProps {
-  frame: DataFrame | null;
-}
 
-interface SampleInfo {
-  time: number | null;
-  values: Array<number | null>;
-}
+
+
 
 interface PanState {
   startX: number;
@@ -66,7 +62,7 @@ function clampIndex(index: number, length: number): number {
 
 type ViewMode = "auto" | "browse";
 
-export function WaveformPanel({ frame }: WaveformPanelProps) {
+export function WaveformPanel() {
   const { t } = useTranslation();
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<uPlot | null>(null);
@@ -77,7 +73,6 @@ export function WaveformPanel({ frame }: WaveformPanelProps) {
   // 备注：cursorInfo 通过 ref 直接操作 DOM，避免鼠标移动触发 re-render
   const cursorTextRef = useRef<HTMLSpanElement>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
-  const [clearedUntilTimestamp, setClearedUntilTimestamp] = useState<number>(0);
   const [hiddenChannels, setHiddenChannels] = useState<Record<number, boolean>>({});
   const hiddenChannelsRef = useRef(hiddenChannels);
   useEffect(() => { hiddenChannelsRef.current = hiddenChannels; }, [hiddenChannels]);
@@ -136,48 +131,109 @@ export function WaveformPanel({ frame }: WaveformPanelProps) {
     document.addEventListener("mouseup", handleMouseUp);
   }, [sidebarWidth]);
 
-  const bufferRef = useRef<{ timestamps: number[]; channels: number[][] }>({
+  const bufferRef = useRef<{ timestamps: number[]; channels: (number | null)[][] }>({
     timestamps: [],
     channels: [],
   });
 
   // 备注：rAF 合并多帧为单次渲染
   const rafIdRef = useRef(0);
+  const renderTimeoutRef = useRef<any>(null);
+  const lastRenderTimeRef = useRef(0);
 
-  const latestSample: SampleInfo =
-    frame && frame.timestamp > clearedUntilTimestamp
-      ? {
-          time: frame.timestamp,
-          values: frame.values.map((value) => value ?? null),
-        }
-      : {
-          time: null,
-          values: [],
-        };
+  // VOFA+ 样式滚动条/信息栏 refs
+  const scrollbarTrackRef = useRef<HTMLDivElement>(null);
+  const scrollbarThumbRef = useRef<HTMLDivElement>(null);
+  const totalPointsValRef = useRef<HTMLSpanElement>(null);
+  const visiblePointsValRef = useRef<HTMLSpanElement>(null);
+  const timeDivValRef = useRef<HTMLSpanElement>(null);
 
-  // 备注：预分配 Float64Array 池，避免每帧分配新数组
-  const dataPoolRef = useRef<Float64Array[]>([]);
+
 
   const buildAlignedData = useCallback((): uPlot.AlignedData => {
     const { timestamps, channels } = bufferRef.current;
-    const needed = channels.length + 1;
-
-    // 备注：确保池大小正确
-    while (dataPoolRef.current.length < needed) {
-      dataPoolRef.current.push(new Float64Array(0));
-    }
-
-    // 备注：复制时间轴
-    const tsArr = new Float64Array(timestamps);
-    dataPoolRef.current[0] = tsArr;
-
-    // 备注：复制各通道数据
-    for (let i = 0; i < channels.length; i++) {
-      dataPoolRef.current[i + 1] = new Float64Array(channels[i]);
-    }
-
-    return dataPoolRef.current.slice(0, needed);
+    return [timestamps, ...channels] as any;
   }, []);
+
+  const updateScrollbarAndInfo = useCallback((plot: uPlot) => {
+    const track = scrollbarTrackRef.current;
+    const thumb = scrollbarThumbRef.current;
+    if (!track || !thumb) return;
+
+    const { timestamps } = bufferRef.current;
+    const total = timestamps.length;
+
+    if (totalPointsValRef.current) {
+      totalPointsValRef.current.textContent = `${total} / ${bufferLimit}`;
+    }
+
+    if (total === 0) {
+      thumb.style.width = "100%";
+      thumb.style.left = "0px";
+      if (visiblePointsValRef.current) visiblePointsValRef.current.textContent = "0";
+      if (timeDivValRef.current) timeDivValRef.current.textContent = "--/X-div";
+      return;
+    }
+
+    const xScale = plot.scales.x;
+    if (xScale.min == null || xScale.max == null) return;
+
+    // 二分搜索查找可视区域索引范围
+    let idxMin = 0;
+    let idxMax = total - 1;
+
+    let low = 0, high = total - 1;
+    while (low <= high) {
+      const mid = (low + high) >> 1;
+      if (timestamps[mid] >= xScale.min) {
+        idxMin = mid;
+        high = mid - 1;
+      } else {
+        low = mid + 1;
+      }
+    }
+
+    low = 0;
+    high = total - 1;
+    while (low <= high) {
+      const mid = (low + high) >> 1;
+      if (timestamps[mid] <= xScale.max) {
+        idxMax = mid;
+        low = mid + 1;
+      } else {
+        high = mid - 1;
+      }
+    }
+
+    const visibleCount = Math.max(0, idxMax - idxMin + 1);
+    if (visiblePointsValRef.current) {
+      visiblePointsValRef.current.textContent = String(visibleCount);
+    }
+
+    const visibleDuration = xScale.max - xScale.min;
+    const timeDiv = visibleDuration / 10;
+    let timeDivText = "";
+    if (timeDiv < 1) {
+      timeDivText = `${(timeDiv * 1000).toFixed(0)}ms/X-div`;
+    } else {
+      timeDivText = `${timeDiv.toFixed(2)}s/X-div`;
+    }
+    if (timeDivValRef.current) {
+      timeDivValRef.current.textContent = timeDivText;
+    }
+
+    const trackWidth = track.clientWidth;
+    if (trackWidth === 0) return;
+
+    const visibleRatio = Math.min(1, visibleCount / total);
+    const thumbWidth = Math.max(20, visibleRatio * trackWidth);
+    const startRatio = total > 1 ? idxMin / (total - 1) : 0;
+    const maxLeft = trackWidth - thumbWidth;
+    const thumbLeft = startRatio * maxLeft;
+
+    thumb.style.width = `${thumbWidth}px`;
+    thumb.style.left = `${thumbLeft}px`;
+  }, [bufferLimit]);
 
   const renderChart = useCallback((resetScales: boolean) => {
     const chart = chartRef.current;
@@ -186,19 +242,172 @@ export function WaveformPanel({ frame }: WaveformPanelProps) {
     const data = buildAlignedData();
     chart.setData(data, resetScales);
 
-    // 备注：autoPoints 生效 — Auto 模式下只显示最后 N 个点
-    if (viewModeRef.current === "auto" && data[0].length > autoPoints) {
-      const xMax = data[0][data[0].length - 1];
-      const xMin = data[0][data[0].length - autoPoints];
-      chart.setScale("x", { min: xMin, max: xMax });
+    const { timestamps, channels } = bufferRef.current;
+    const lastIdx = timestamps.length - 1;
+
+    if (data[0].length > 0) {
+      if (viewModeRef.current === "auto") {
+        const rawSpan = data[0].length > autoPoints
+          ? data[0][data[0].length - 1] - data[0][data[0].length - autoPoints]
+          : autoPoints * (deltaT / 1000);
+        const visibleSpan = rawSpan / 0.9; // 10% 右边距
+        const latestTime = data[0][data[0].length - 1];
+        const xMax = latestTime + visibleSpan * 0.1;
+        const xMin = latestTime - visibleSpan * 0.9;
+        chart.setScale("x", { min: xMin, max: xMax });
+      }
     }
-  }, [buildAlignedData, autoPoints]);
+
+    // 1. If cursor is not active, update the top bar with the latest value directly
+    const cursor = chart.cursor;
+    const isCursorActive = cursor && cursor.left != null && cursor.left >= 0 && cursor.top != null && cursor.top >= 0;
+    if (!isCursorActive && cursorTextRef.current) {
+      if (lastIdx >= 0) {
+        cursorTextRef.current.textContent =
+          `Latest ${fmtTime(timestamps[lastIdx])} | ${channels.map((ch, i) => `CH${i + 1} ${fmtValue(ch[lastIdx] ?? null)}`).join("  ")}`;
+      } else {
+        cursorTextRef.current.textContent = t("waveform.waiting", { defaultValue: "等待数据..." });
+      }
+    }
+
+    // 2. Update sidebar channel values directly via DOM query
+    const valSpans = containerRef.current?.closest(".waveform-layout")?.querySelectorAll(".channel-value");
+    if (valSpans) {
+      valSpans.forEach((span) => {
+        const idxAttr = span.getAttribute("data-ch-idx");
+        if (idxAttr !== null) {
+          const index = Number(idxAttr);
+          const val = lastIdx >= 0 ? (channels[index]?.[lastIdx] ?? null) : null;
+          span.textContent = fmtValue(val);
+        }
+      });
+    }
+
+    updateScrollbarAndInfo(chart);
+  }, [buildAlignedData, autoPoints, deltaT, updateScrollbarAndInfo, t]);
 
   const resetToLatest = useCallback(() => {
     viewModeRef.current = "auto";
     setViewMode("auto");
-    renderChart(true);
+    if (chartRef.current) {
+      chartRef.current.setScale("x", { min: null as any, max: null as any });
+      chartRef.current.setScale("y", { min: null as any, max: null as any });
+    }
+    renderChart(false);
   }, [renderChart]);
+
+  const handleScrollbarThumbMouseDown = useCallback((mouseDownEvent: ReactMouseEvent<HTMLDivElement>) => {
+    mouseDownEvent.preventDefault();
+    const chart = chartRef.current;
+    const track = scrollbarTrackRef.current;
+    const thumb = scrollbarThumbRef.current;
+    if (!chart || !track || !thumb) return;
+
+    const { timestamps } = bufferRef.current;
+    const total = timestamps.length;
+    if (total === 0) return;
+
+    const trackWidth = track.clientWidth;
+    const thumbWidth = thumb.offsetWidth;
+    const maxLeft = trackWidth - thumbWidth;
+    if (maxLeft <= 0) return;
+
+    const startX = mouseDownEvent.clientX;
+    const startLeft = thumb.offsetLeft;
+
+    const xScale = chart.scales.x;
+    if (xScale.min == null || xScale.max == null) return;
+
+    let idxMin = 0;
+    let idxMax = total - 1;
+    for (let i = 0; i < total; i++) {
+      if (timestamps[i] >= xScale.min) { idxMin = i; break; }
+    }
+    for (let i = total - 1; i >= 0; i--) {
+      if (timestamps[i] <= xScale.max) { idxMax = i; break; }
+    }
+    const visibleCount = idxMax - idxMin + 1;
+
+    if (viewModeRef.current !== "browse") {
+      viewModeRef.current = "browse";
+      setViewMode("browse");
+    }
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const deltaX = moveEvent.clientX - startX;
+      let nextLeft = Math.max(0, Math.min(maxLeft, startLeft + deltaX));
+
+      const startRatio = nextLeft / maxLeft;
+      const targetStartIdx = Math.round(startRatio * (total - visibleCount));
+      const targetEndIdx = Math.min(total - 1, targetStartIdx + visibleCount - 1);
+
+      if (targetStartIdx >= 0 && targetEndIdx < total) {
+        chart.setScale("x", {
+          min: timestamps[targetStartIdx],
+          max: timestamps[targetEndIdx],
+        });
+      }
+    };
+
+    const handleMouseUp = () => {
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
+    };
+
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseup", handleMouseUp);
+  }, []);
+
+  const handleScrollbarTrackMouseDown = useCallback((mouseDownEvent: ReactMouseEvent<HTMLDivElement>) => {
+    if (mouseDownEvent.target === scrollbarThumbRef.current) return;
+
+    const chart = chartRef.current;
+    const track = scrollbarTrackRef.current;
+    const thumb = scrollbarThumbRef.current;
+    if (!chart || !track || !thumb) return;
+
+    const { timestamps } = bufferRef.current;
+    const total = timestamps.length;
+    if (total === 0) return;
+
+    const rect = track.getBoundingClientRect();
+    const clickX = mouseDownEvent.clientX - rect.left;
+    const trackWidth = track.clientWidth;
+    const thumbWidth = thumb.offsetWidth;
+
+    let targetLeft = clickX - thumbWidth / 2;
+    const maxLeft = trackWidth - thumbWidth;
+    targetLeft = Math.max(0, Math.min(maxLeft, targetLeft));
+
+    const xScale = chart.scales.x;
+    if (xScale.min == null || xScale.max == null) return;
+
+    let idxMin = 0;
+    let idxMax = total - 1;
+    for (let i = 0; i < total; i++) {
+      if (timestamps[i] >= xScale.min) { idxMin = i; break; }
+    }
+    for (let i = total - 1; i >= 0; i--) {
+      if (timestamps[i] <= xScale.max) { idxMax = i; break; }
+    }
+    const visibleCount = idxMax - idxMin + 1;
+
+    if (viewModeRef.current !== "browse") {
+      viewModeRef.current = "browse";
+      setViewMode("browse");
+    }
+
+    const startRatio = maxLeft > 0 ? targetLeft / maxLeft : 0;
+    const targetStartIdx = Math.round(startRatio * (total - visibleCount));
+    const targetEndIdx = Math.min(total - 1, targetStartIdx + visibleCount - 1);
+
+    if (targetStartIdx >= 0 && targetEndIdx < total) {
+      chart.setScale("x", {
+        min: timestamps[targetStartIdx],
+        max: timestamps[targetEndIdx],
+      });
+    }
+  }, []);
 
   const exportCsv = useCallback(async () => {
     const { timestamps, channels } = bufferRef.current;
@@ -253,6 +462,7 @@ export function WaveformPanel({ frame }: WaveformPanelProps) {
         points: { show: false },
         value: (_u, v) => fmtValue(v),
         show: !hiddenChannels[index],
+        paths: uPlot.paths.spline ? uPlot.paths.spline() : undefined,
       });
     }
 
@@ -280,10 +490,32 @@ export function WaveformPanel({ frame }: WaveformPanelProps) {
           points: { show: false },
         },
         scales: {
-          x: { time: false, auto: true },
+          x: { time: false, auto: false },
           y: { auto: true },
         },
         hooks: {
+          draw: [
+            (plot) => {
+              const { ctx } = plot;
+              const { timestamps } = bufferRef.current;
+              if (timestamps.length === 0) return;
+
+              const latestTime = timestamps[timestamps.length - 1];
+              const xPos = plot.valToPos(latestTime, "x", true);
+
+              if (xPos >= plot.bbox.left && xPos <= plot.bbox.left + plot.bbox.width) {
+                ctx.save();
+                ctx.beginPath();
+                ctx.setLineDash([4, 4]);
+                ctx.lineWidth = 1.5;
+                ctx.strokeStyle = "#a855f7";
+                ctx.moveTo(xPos, plot.bbox.top);
+                ctx.lineTo(xPos, plot.bbox.top + plot.bbox.height);
+                ctx.stroke();
+                ctx.restore();
+              }
+            }
+          ],
           setCursor: [
             (plot) => {
               const { left, top } = plot.cursor;
@@ -375,9 +607,16 @@ export function WaveformPanel({ frame }: WaveformPanelProps) {
               }
             },
           ],
+          setScale: [
+            (plot, key) => {
+              if (key === "x") {
+                updateScrollbarAndInfo(plot);
+              }
+            }
+          ]
         },
       },
-      [new Float64Array(0), ...Array.from({ length: numChannels }, () => new Float64Array(0))],
+      [[], ...Array.from({ length: numChannels }, () => [])],
       el,
     );
 
@@ -386,7 +625,7 @@ export function WaveformPanel({ frame }: WaveformPanelProps) {
     if (bufferRef.current.timestamps.length > 0) {
       renderChart(true);
     }
-  }, [renderChart, hiddenChannels, t]);
+  }, [renderChart, hiddenChannels, t, updateScrollbarAndInfo]);
 
   useEffect(() => {
     const chart = chartRef.current;
@@ -400,50 +639,82 @@ export function WaveformPanel({ frame }: WaveformPanelProps) {
   }, [hiddenChannels, channelCount]);
 
   useEffect(() => {
-    if (!frame) return;
+    const unlistenPromise = listen<DataFrame>("waveform-data", (event) => {
+      const frame = event.payload;
+      if (!frame) return;
 
-    const numChannels = frame.values.length;
-    if (numChannels === 0) return;
+      const numChannels = frame.values.length;
+      if (numChannels === 0) return;
 
-    if (bufferRef.current.channels.length === 0) {
-      bufferRef.current.channels = Array.from({ length: numChannels }, () => []);
-      setChannelCount(numChannels);
-    } else if (bufferRef.current.channels.length !== numChannels) {
-      bufferRef.current = {
-        timestamps: [],
-        channels: Array.from({ length: numChannels }, () => []),
-      };
-      setHiddenChannels({}); // P0 #3: 通道数变化时重置隐藏状态
-      initChart(numChannels);
-    }
-
-    if (!chartRef.current) {
-      initChart(numChannels);
-    }
-
-    const { timestamps, channels } = bufferRef.current;
-    timestamps.push(frame.timestamp);
-    for (let index = 0; index < channels.length; index++) {
-      channels[index].push(frame.values[index] ?? 0);
-    }
-
-    while (timestamps.length > bufferLimit) {
-      // 备注：用 splice 批量淘汰，替代逐个 shift (O(n) → O(n) 但只调一次)
-      const excess = timestamps.length - bufferLimit;
-      timestamps.splice(0, excess);
-      for (const channel of channels) {
-        channel.splice(0, excess);
+      let needInit = false;
+      if (bufferRef.current.channels.length === 0) {
+        bufferRef.current.channels = Array.from({ length: numChannels }, () => []);
+        setChannelCount(numChannels);
+        needInit = true;
+      } else if (bufferRef.current.channels.length !== numChannels) {
+        bufferRef.current = {
+          timestamps: [],
+          channels: Array.from({ length: numChannels }, () => []),
+        };
+        setHiddenChannels({}); // P0 #3: 通道数变化时重置隐藏状态
+        setChannelCount(numChannels);
+        needInit = true;
       }
-    }
 
-    if (!pausedRef.current && !panningRef.current && viewModeRef.current === "auto") {
-      // 备注：用 rAF 合并同帧内的多次数据更新为一次渲染
-      cancelAnimationFrame(rafIdRef.current);
-      rafIdRef.current = requestAnimationFrame(() => {
-        renderChart(true);
-      });
-    }
-  }, [frame, bufferLimit, initChart, renderChart]);
+      const { timestamps, channels } = bufferRef.current;
+
+      // 检测时间断开并插入空数据以断开线条连接
+      if (timestamps.length > 0) {
+        const lastTime = timestamps[timestamps.length - 1];
+        const gapThreshold = Math.max(0.5, 5 * (deltaT / 1000));
+        if (frame.timestamp - lastTime > gapThreshold) {
+          timestamps.push(lastTime + 0.000001);
+          for (let index = 0; index < channels.length; index++) {
+            channels[index].push(null);
+          }
+        }
+      }
+
+      timestamps.push(frame.timestamp);
+      for (let index = 0; index < channels.length; index++) {
+        channels[index].push(frame.values[index] ?? 0);
+      }
+
+      while (timestamps.length > bufferLimit) {
+        // 备注：用 splice 批量淘汰，替代逐个 shift (O(n) → O(n) 但只调一次)
+        const excess = timestamps.length - bufferLimit;
+        timestamps.splice(0, excess);
+        for (const channel of channels) {
+          channel.splice(0, excess);
+        }
+      }
+
+      if (needInit || !chartRef.current) {
+        initChart(numChannels);
+      }
+
+      const el = containerRef.current;
+      const isVisible = el && el.clientWidth > 0;
+      if (!pausedRef.current && !panningRef.current && isVisible) {
+        const now = performance.now();
+        const nextAllowedRender = lastRenderTimeRef.current + deltaT;
+        const delay = Math.max(0, nextAllowedRender - now);
+
+        if (renderTimeoutRef.current) {
+          clearTimeout(renderTimeoutRef.current);
+        }
+
+        renderTimeoutRef.current = setTimeout(() => {
+          lastRenderTimeRef.current = performance.now();
+          renderChart(false);
+        }, delay);
+      }
+    });
+
+    return () => {
+      void unlistenPromise.then((fn) => fn());
+    };
+  }, [bufferLimit, deltaT, initChart, renderChart]);
 
   useEffect(() => {
     const el = containerRef.current;
@@ -455,6 +726,7 @@ export function WaveformPanel({ frame }: WaveformPanelProps) {
       const height = Math.floor(rect.height);
       if (chartRef.current && width > 0 && height > 0) {
         chartRef.current.setSize({ width, height });
+        renderChart(false);
       } else if (!chartRef.current && width > 0 && height > 0 && bufferRef.current.channels.length > 0) {
         initChart(bufferRef.current.channels.length);
       }
@@ -468,7 +740,7 @@ export function WaveformPanel({ frame }: WaveformPanelProps) {
       observer.disconnect();
       window.removeEventListener("resize", resizeChart);
     };
-  }, [initChart]);
+  }, [initChart, renderChart]);
 
   useEffect(() => {
     const handleMouseMove = (event: MouseEvent) => {
@@ -511,8 +783,8 @@ export function WaveformPanel({ frame }: WaveformPanelProps) {
         el.style.cursor = "";
       }
 
-      if (!pausedRef.current && viewModeRef.current === "auto") {
-        renderChart(true);
+      if (!pausedRef.current) {
+        renderChart(false);
       }
     };
 
@@ -527,6 +799,9 @@ export function WaveformPanel({ frame }: WaveformPanelProps) {
 
   useEffect(() => {
     return () => {
+      if (renderTimeoutRef.current) {
+        clearTimeout(renderTimeoutRef.current);
+      }
       cancelAnimationFrame(rafIdRef.current);
       chartRef.current?.destroy();
       chartRef.current = null;
@@ -557,7 +832,6 @@ export function WaveformPanel({ frame }: WaveformPanelProps) {
     if (cursorTextRef.current) {
       cursorTextRef.current.textContent = t("waveform.waiting", { defaultValue: "等待数据..." });
     }
-    setClearedUntilTimestamp(frame?.timestamp ?? 0);
     chartRef.current?.setData(
       [new Float64Array(0), ...Array.from({ length: channelCount }, () => new Float64Array(0))],
       true,
@@ -649,8 +923,10 @@ export function WaveformPanel({ frame }: WaveformPanelProps) {
     el.style.cursor = "grabbing";
   }, []);
 
-  const defaultCursorText = latestSample.time != null
-    ? `Latest ${fmtTime(latestSample.time)} | ${latestSample.values.map((value, index) => `CH${index + 1} ${fmtValue(value)}`).join("  ")}`
+  const { timestamps, channels } = bufferRef.current;
+  const lastIdx = timestamps.length - 1;
+  const defaultCursorText = lastIdx >= 0
+    ? `Latest ${fmtTime(timestamps[lastIdx])} | ${channels.map((ch, i) => `CH${i + 1} ${fmtValue(ch[lastIdx] ?? null)}`).join("  ")}`
     : t("waveform.waiting", { defaultValue: "等待数据..." });
 
   return (
@@ -675,6 +951,44 @@ export function WaveformPanel({ frame }: WaveformPanelProps) {
           onWheel={handleWheel}
         >
           <div ref={tooltipRef} className="waveform-tooltip" style={{ display: "none", position: "absolute", pointerEvents: "none", zIndex: 10 }} />
+        </div>
+        <div className="waveform-scrollbar-container">
+          <div 
+            className="waveform-scrollbar-track" 
+            ref={scrollbarTrackRef} 
+            onMouseDown={handleScrollbarTrackMouseDown}
+          >
+            <div 
+              className="waveform-scrollbar-thumb" 
+              ref={scrollbarThumbRef} 
+              onMouseDown={handleScrollbarThumbMouseDown}
+            />
+          </div>
+        </div>
+        <div className="waveform-info-bar">
+          <button 
+            className="btn-clear-trash" 
+            onClick={handleClear}
+            title={t("waveform.clear", { defaultValue: "清空缓存" })}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="3 6 5 6 21 6"></polyline>
+              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+              <line x1="10" y1="11" x2="10" y2="17"></line>
+              <line x1="14" y1="11" x2="14" y2="17"></line>
+            </svg>
+          </button>
+          <span className="info-item">
+            <span ref={totalPointsValRef} className="info-label-value">0 / {bufferLimit}</span>
+          </span>
+          <span className="info-divider">|</span>
+          <span className="info-item">
+            <span ref={visiblePointsValRef} className="info-label-value">0</span>
+          </span>
+          <span className="info-divider">|</span>
+          <span className="info-item">
+            <span ref={timeDivValRef} className="info-label-value">--/X-div</span>
+          </span>
         </div>
         {/* 备注：状态栏 - 可调参数 */}
         <div className="waveform-statusbar">
@@ -731,7 +1045,9 @@ export function WaveformPanel({ frame }: WaveformPanelProps) {
           {Array.from({ length: channelCount }).map((_, index) => {
             const isHidden = !!hiddenChannels[index];
             const color = CHANNEL_COLORS[index % CHANNEL_COLORS.length];
-            const val = frame ? (frame.values[index] ?? null) : null;
+            const { timestamps, channels } = bufferRef.current;
+            const lastIdx = timestamps.length - 1;
+            const val = lastIdx >= 0 ? (channels[index]?.[lastIdx] ?? null) : null;
             return (
               <div key={index} className={`waveform-sidebar-item ${isHidden ? "hidden" : ""}`}>
                 <button
@@ -754,7 +1070,11 @@ export function WaveformPanel({ frame }: WaveformPanelProps) {
                 <span className="channel-name" style={{ color: isHidden ? "var(--text-muted)" : color }}>
                   CH{index + 1}
                 </span>
-                <span className="channel-value" style={{ color: isHidden ? "var(--text-muted)" : color }}>
+                <span
+                  className="channel-value"
+                  data-ch-idx={index}
+                  style={{ color: isHidden ? "var(--text-muted)" : color }}
+                >
                   {fmtValue(val)}
                 </span>
               </div>

@@ -1908,3 +1908,83 @@ input[type="radio"] {
   background: var(--accent);
   box-shadow: 0 0 6px var(--accent);
 }
+
+/* ========== 波形底部滚动条及信息栏 ========== */
+.waveform-scrollbar-container {
+  height: 12px;
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  position: relative;
+  user-select: none;
+  flex-shrink: 0;
+}
+.waveform-scrollbar-track {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  top: 3px;
+  bottom: 3px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 3px;
+  border: 1px solid var(--border);
+  cursor: pointer;
+}
+.waveform-scrollbar-thumb {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: var(--border);
+  border-radius: 2px;
+  cursor: grab;
+  min-width: 16px;
+}
+.waveform-scrollbar-thumb:hover {
+  background: var(--accent);
+}
+.waveform-scrollbar-thumb:active {
+  background: var(--accent);
+  cursor: grabbing;
+}
+.waveform-info-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 4px 12px;
+  background: var(--bg-secondary);
+  font-size: 10px;
+  color: var(--text-muted);
+  font-family: "Consolas", "Monaco", monospace;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--border);
+  height: 24px;
+}
+.waveform-info-bar .info-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.waveform-info-bar .info-divider {
+  color: var(--border);
+}
+.waveform-info-bar .info-label-value {
+  color: var(--text-secondary);
+}
+.waveform-info-bar .btn-clear-trash {
+  background: transparent;
+  border: none;
+  padding: 0;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.15s;
+}
+.waveform-info-bar .btn-clear-trash:hover {
+  color: var(--danger);
+}
+.waveform-info-bar .btn-clear-trash svg {
+  width: 12px;
+  height: 12px;
+}

@@ -8,7 +8,7 @@ import { TerminalPanel } from "./components/TerminalPanel";
 import { ModbusMonitor } from "./components/ModbusMonitor";
 import { useSerial } from "./hooks/useSerial";
 import { useTerminalLogs } from "./hooks/useTerminalLogs";
-import type { DataFrame } from "./types/serial";
+
 import type { AppConfig, ViewMode } from "./types/config";
 import type { ModbusRegister, ByteOrderOption } from "./types/modbus";
 import { DEFAULT_CONFIG } from "./types/config";
@@ -29,7 +29,6 @@ function App() {
   });
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>(config.defaultViewMode);
-  const [waveformFrame, setWaveformFrame] = useState<DataFrame | null>(null);
   const [activeFunction, setActiveFunction] = useState<"serial" | "modbus" | "can">("serial");
 
   // Modbus State
@@ -82,7 +81,6 @@ function App() {
   const { ports, serialConfig, setSerialConfig, status, byteStats, refreshPorts, togglePort } = useSerial(
     addLog,
     addTextLog,
-    setWaveformFrame,
   );
 
   // Stop polling if serial disconnects
@@ -265,7 +263,7 @@ function App() {
         <div className="sidebar-resizer" onMouseDown={handleResizerMouseDown} />
 
         <main className="content">
-          {activeFunction === "modbus" ? (
+          <div style={{ display: activeFunction === "modbus" ? "flex" : "none", flex: 1, flexDirection: "column", minHeight: 0 }}>
             <ModbusMonitor
               registers={modbusRegisters}
               setRegisters={setModbusRegisters}
@@ -275,46 +273,46 @@ function App() {
               connected={status.connected}
               onAddTextLog={addTextLog}
             />
-          ) : (
-            <>
-              {/* Waveform Wrapper */}
-              <div
-                style={{
-                  display: viewMode === "terminal" ? "none" : "flex",
-                  flex: viewMode === "split" ? "none" : 1,
-                  height: viewMode === "split" ? `${waveformHeight}px` : "auto",
-                  minHeight: 0,
-                  minWidth: 0,
-                }}
-              >
-                <WaveformPanel frame={waveformFrame} />
-              </div>
+          </div>
 
-              {/* Horizontal Resizer in Split Mode */}
-              {viewMode === "split" && (
-                <div className="content-resizer-h" onMouseDown={handleResizerHMouseDown} />
-              )}
+          <div style={{ display: activeFunction === "serial" ? "flex" : "none", flex: 1, flexDirection: "column", minHeight: 0 }}>
+            {/* Waveform Wrapper */}
+            <div
+              style={{
+                display: viewMode === "terminal" ? "none" : "flex",
+                flex: viewMode === "split" ? "none" : 1,
+                height: viewMode === "split" ? `${waveformHeight}px` : "auto",
+                minHeight: 0,
+                minWidth: 0,
+              }}
+            >
+              <WaveformPanel />
+            </div>
 
-              {/* Terminal Wrapper */}
-              <div
-                style={{
-                  display: viewMode === "waveform" ? "none" : "flex",
-                  flex: 1,
-                  minHeight: 0,
-                }}
-              >
-                <TerminalPanel
-                  logs={logs}
-                  logContainerRef={logContainerRef}
-                  status={status}
-                  byteStats={byteStats}
-                  onAddTextLog={addTextLog}
-                  onClearLogs={clearLogs}
-                  onExportLogs={exportLogs}
-                />
-              </div>
-            </>
-          )}
+            {/* Horizontal Resizer in Split Mode */}
+            {viewMode === "split" && (
+              <div className="content-resizer-h" onMouseDown={handleResizerHMouseDown} />
+            )}
+
+            {/* Terminal Wrapper */}
+            <div
+              style={{
+                display: viewMode === "waveform" ? "none" : "flex",
+                flex: 1,
+                minHeight: 0,
+              }}
+            >
+              <TerminalPanel
+                logs={logs}
+                logContainerRef={logContainerRef}
+                status={status}
+                byteStats={byteStats}
+                onAddTextLog={addTextLog}
+                onClearLogs={clearLogs}
+                onExportLogs={exportLogs}
+              />
+            </div>
+          </div>
         </main>
       </div>
     </div>
