@@ -88,6 +88,7 @@ Most serial debugging tools either have outdated UIs, rely on Java/Python runtim
 - Close to tray (configurable)
 - Auto-start on boot
 - Window state persistence (size, position, maximized)
+- Custom window controls (minimize / maximize / close / always on top)
 
 ### Safety & Stability
 

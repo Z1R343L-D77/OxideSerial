@@ -223,6 +223,94 @@ body {
   gap: 12px;
 }
 
+/* ========== 窗口控制按钮 ========== */
+
+.window-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 12px;
+  border-left: 1px solid var(--border);
+  padding-left: 12px;
+}
+
+.btn-win-control {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: all 0.25s var(--ease-out);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  margin: 0;
+}
+
+.btn-win-control:active {
+  transform: scale(0.95);
+}
+
+.btn-pin {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  padding: 4px 8px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  color: var(--text-secondary);
+}
+
+.btn-pin svg {
+  width: 12px;
+  height: 12px;
+}
+
+.btn-pin .pin-text {
+  font-size: 8.5px;
+  font-weight: 500;
+  line-height: 1;
+}
+
+.btn-pin.active {
+  color: var(--accent);
+  background: rgba(232, 168, 73, 0.12);
+  border-color: rgba(232, 168, 73, 0.25);
+}
+
+.btn-pin:hover {
+  color: var(--accent);
+  background: rgba(232, 168, 73, 0.08);
+}
+
+.btn-win-control:not(.btn-pin) {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  color: var(--text-secondary);
+}
+
+.btn-win-control:not(.btn-pin) svg {
+  width: 14px;
+  height: 14px;
+}
+
+.btn-win-control:not(.btn-pin):hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-primary);
+}
+
+[data-theme="light"] .btn-win-control:not(.btn-pin):hover {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.btn-close-win:hover {
+  background: var(--danger) !important;
+  color: white !important;
+}
+
 /* ========== 状态指示器 ========== */
 
 .status-indicator {

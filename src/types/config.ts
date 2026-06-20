@@ -2,7 +2,7 @@ export type ThemeOption = "light" | "dark" | "system";
 export type ViewMode = "terminal" | "waveform" | "split";
 
 // D3: 版本号单一来源
-export const APP_VERSION = "0.3.0";
+export const APP_VERSION = "0.3.1";
 
 export interface AppConfig {
   theme: ThemeOption;
