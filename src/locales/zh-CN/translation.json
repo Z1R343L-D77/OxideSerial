@@ -38,7 +38,9 @@
       "closeToTray": "关闭到托盘",
       "closeToTrayTip": "开启后，关闭窗口将隐藏到系统托盘，保持后台运行",
       "autostart": "开机自启",
-      "autostartTip": "开启后，应用程序将在系统启动时自动运行"
+      "autostartTip": "开启后，应用程序将在系统启动时自动运行",
+      "maxLogs": "终端日志限制",
+      "maxLogsTip": "设置终端在内存中保留的最大日志条数，当前为 {{val}} 条"
     },
     "about": {
       "title": "关于",
@@ -142,7 +144,9 @@
     "showTxTitle": "当前: 显示已发送数据",
     "fontSize": "字体大小",
     "fontSizeIncrease": "增大字号",
-    "fontSizeDecrease": "减小字号"
+    "fontSizeDecrease": "减小字号",
+    "autoScrollLocked": "自动滚动已锁定，点击返回底部",
+    "searchPlaceholder": "搜索日志..."
   },
   "waveform": {
     "title": "波形",
@@ -170,7 +174,9 @@
     "bufferLimitTooltip": "设置每个通道在内存中保留的最大采样点数，超出上限的老数据将被淘汰，默认为 50000",
     "autoPointsTooltip": "设定在 Auto 模式下 X 轴可视区域内能容纳显示的数据点个数，默认为 100",
     "tooltipTime": "时间",
-    "tooltipValue": "数值"
+    "tooltipValue": "数值",
+    "downsample": "数据抽稀",
+    "downsampleTooltip": "开启高性能 MinMax 下采样数据抽稀，降低大缓冲区下的 GPU 负荷并完美保留信号极值"
   },
   "modbus": {
     "title": "Modbus RTU",
@@ -286,5 +292,9 @@
   "quickSendHelpDesc3": "3. **循环发送**：勾选下方【循环发送】后，系统将筛选出所有【顺序】大于 0 的行，并按数值从小到大循环发送，每行发送完毕后延时对应毫秒数。",
   "quickSendHelpDesc4": "4. **导入/导出**：支持以标准 .ini 格式配置文件批量导入与导出快捷指令列表。",
   "quickSendDoubleClickCommentTooltip": "双击修改注释",
-  "quickSendDataPlaceholder": "发送数据..."
+  "quickSendDataPlaceholder": "发送数据...",
+  "errorBoundary": {
+    "title": "组件渲染错误",
+    "retry": "重试"
+  }
 }

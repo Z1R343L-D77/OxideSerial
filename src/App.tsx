@@ -9,6 +9,7 @@ import { ModbusMonitor } from "./components/ModbusMonitor";
 import { useSerial } from "./hooks/useSerial";
 import { useTerminalLogs } from "./hooks/useTerminalLogs";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 
 import type { AppConfig, ViewMode } from "./types/config";
 import type { ModbusRegister, ByteOrderOption } from "./types/modbus";
@@ -83,7 +84,7 @@ function App() {
   }, [modbusByteOrder]);
 
   // 备注：日志 hook
-  const { logs, logContainerRef, addLog, addTextLog, clearLogs, exportLogs } = useTerminalLogs(config.locale || "zh-CN");
+  const { logs, logContainerRef, addLog, addTextLog, clearLogs, exportLogs } = useTerminalLogs(config.locale || "zh-CN", config.maxLogs);
 
   // 备注：串口 hook
   const {
@@ -105,6 +106,16 @@ function App() {
       setIsModbusPolling(false);
     }
   }, [status.connected]);
+
+  // Listen for Modbus polling stopped event from backend (e.g. on connection error)
+  useEffect(() => {
+    const unlistenPromise = listen("modbus-polling-stopped", () => {
+      setIsModbusPolling(false);
+    });
+    return () => {
+      void unlistenPromise.then((fn) => fn());
+    };
+  }, []);
 
   // 同步 Modbus 轮询状态及配置到 Rust 后端（仅在定义/开关/间隔/字节序变更时触发）
   const regConfigsStr = JSON.stringify(

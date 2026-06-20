@@ -38,7 +38,9 @@
       "closeToTray": "關閉到系統匣",
       "closeToTrayTip": "開啟後，關閉視窗將隱藏到系統匣，保持背景執行",
       "autostart": "開機自啟",
-      "autostartTip": "開啟後，應用程式將在系統啟動時自動執行"
+      "autostartTip": "開啟後，應用程式將在系統啟動時自動執行",
+      "maxLogs": "終端日誌限制",
+      "maxLogsTip": "設置終端在記憶體中保留的最大日誌條數，目前為 {{val}} 條"
     },
     "about": {
       "title": "關於",
@@ -142,7 +144,9 @@
     "showTxTitle": "目前: 顯示已傳送數據",
     "fontSize": "字型大小",
     "fontSizeIncrease": "增大字型",
-    "fontSizeDecrease": "減小字型"
+    "fontSizeDecrease": "減小字型",
+    "autoScrollLocked": "自動滾動已鎖定，點擊返回底部",
+    "searchPlaceholder": "搜尋日誌..."
   },
   "waveform": {
     "title": "波形",
@@ -170,7 +174,9 @@
     "bufferLimitTooltip": "設定每個通道在記憶體中保留的最大採樣點數，超出上限的舊資料將被淘汰，預設為 50000",
     "autoPointsTooltip": "設定在 Auto 模式下 X 軸可視區域內能容納顯示的資料點個數，預設為 100",
     "tooltipTime": "時間",
-    "tooltipValue": "數值"
+    "tooltipValue": "數值",
+    "downsample": "數據抽稀",
+    "downsampleTooltip": "開啟高性能 MinMax 下採樣數據抽稀，降低大緩衝區下的 GPU 負荷並完美保留訊號極值"
   },
   "modbus": {
     "title": "Modbus RTU",
@@ -286,5 +292,9 @@
   "quickSendHelpDesc3": "3. **循環發送**：勾選下方【循環發送】後，系統將篩選出所有【順序】大於 0 的行，並按數值從小到大循環發送，每行發送完畢後延时對應毫秒數。",
   "quickSendHelpDesc4": "4. **導入/導出**：支持以標準 .ini 格式配置文件批量導入與導出快捷指令列表。",
   "quickSendDoubleClickCommentTooltip": "雙擊修改注釋",
-  "quickSendDataPlaceholder": "發送數據..."
+  "quickSendDataPlaceholder": "發送數據...",
+  "errorBoundary": {
+    "title": "組件渲染錯誤",
+    "retry": "重試"
+  }
 }

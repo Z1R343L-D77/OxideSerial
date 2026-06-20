@@ -54,6 +54,8 @@ Most serial debugging tools either have outdated UIs, rely on Java/Python runtim
 - Auto-send with configurable interval
 - Timestamp follows language setting
 - Export terminal log to .txt file
+- Terminal search (keyword highlight matching)
+- Auto-scroll lock (floating badge when scrolling up)
 - UTF-8 / GBK encoding switch
 
 ### Waveform Display

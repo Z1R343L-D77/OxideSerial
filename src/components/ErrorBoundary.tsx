@@ -1,4 +1,5 @@
 import { Component, type ReactNode } from "react";
+import i18n from "../locales";
 
 interface Props {
   children: ReactNode;
@@ -39,7 +40,7 @@ export class ErrorBoundary extends Component<Props, State> {
           gap: 16,
           padding: 32,
         }}>
-          <h2 style={{ color: "var(--danger)", margin: 0 }}>组件渲染错误</h2>
+          <h2 style={{ color: "var(--danger)", margin: 0 }}>{i18n.t("errorBoundary.title", { defaultValue: "组件渲染错误" })}</h2>
           <pre style={{
             background: "var(--bg-secondary)",
             border: "1px solid var(--border)",
@@ -56,7 +57,7 @@ export class ErrorBoundary extends Component<Props, State> {
             onClick={this.handleReload}
             style={{
               background: "var(--accent)",
-              color: "white",
+              color: "var(--bg-primary)",
               border: "none",
               borderRadius: 8,
               padding: "8px 24px",
@@ -65,7 +66,7 @@ export class ErrorBoundary extends Component<Props, State> {
               fontWeight: 600,
             }}
           >
-            重试
+            {i18n.t("errorBoundary.retry", { defaultValue: "重试" })}
           </button>
         </div>
       );

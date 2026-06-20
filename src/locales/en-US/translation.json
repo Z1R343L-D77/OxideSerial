@@ -38,7 +38,9 @@
       "closeToTray": "Close to Tray",
       "closeToTrayTip": "When enabled, closing the window hides it to the system tray, keeping the application running in the background",
       "autostart": "Launch on Startup",
-      "autostartTip": "When enabled, the application will automatically launch on system startup"
+      "autostartTip": "When enabled, the application will automatically launch on system startup",
+      "maxLogs": "Log Buffer Limit",
+      "maxLogsTip": "Configure maximum logs retained in the terminal memory, current is {{val}} rows"
     },
     "about": {
       "title": "About",
@@ -142,7 +144,9 @@
     "showTxTitle": "Current: Show sent data",
     "fontSize": "Font Size",
     "fontSizeIncrease": "Increase font size",
-    "fontSizeDecrease": "Decrease font size"
+    "fontSizeDecrease": "Decrease font size",
+    "autoScrollLocked": "Auto Scroll Locked, click to return to bottom",
+    "searchPlaceholder": "Search logs..."
   },
   "waveform": {
     "title": "Waveform",
@@ -170,7 +174,9 @@
     "bufferLimitTooltip": "Set maximum sample points retained in memory per channel. Exceeded old data is discarded. Default is 50000",
     "autoPointsTooltip": "Set data points count to display in X-axis visible area under Auto mode. Default is 100",
     "tooltipTime": "Time",
-    "tooltipValue": "Value"
+    "tooltipValue": "Value",
+    "downsample": "Downsampling",
+    "downsampleTooltip": "Enable high-performance MinMax downsampling to reduce GPU usage under large buffers while preserving signal peaks"
   },
   "modbus": {
     "title": "Modbus RTU",
@@ -286,5 +292,9 @@
   "quickSendHelpDesc3": "3. **Cycle Send**: Checking [Cycle Send] at the bottom will filter all rows with a [Seq] greater than 0, sort them ascendingly, and transmit them sequentially, waiting for the configured delay after each transmission.",
   "quickSendHelpDesc4": "4. **Import/Export**: Supports batch import and export of quick command lists using standard .ini configuration files.",
   "quickSendDoubleClickCommentTooltip": "Double-click to edit comment",
-  "quickSendDataPlaceholder": "Send data..."
+  "quickSendDataPlaceholder": "Send data...",
+  "errorBoundary": {
+    "title": "Component Render Error",
+    "retry": "Retry"
+  }
 }

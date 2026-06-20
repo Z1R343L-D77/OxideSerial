@@ -1629,6 +1629,7 @@ fn start_modbus_poll(
             }
 
             let mut results = Vec::<ModbusRegisterResult>::new();
+            let mut connection_error = false;
 
             for reg in &enabled_regs {
                 // 再次检查停止标志
@@ -1703,10 +1704,15 @@ fn start_modbus_poll(
                     Err(e) => {
                         results.push(ModbusRegisterResult {
                             id: reg.id.clone(),
-                            value: e,
+                            value: e.clone(),
                             status: "error".into(),
                             last_updated: chrono_now(),
                         });
+
+                        if e.contains("未连接") || e.contains("write:") || e.contains("send:") || e.contains("disconnected") {
+                            connection_error = true;
+                            break;
+                        }
                     }
                 }
 
@@ -1717,6 +1723,14 @@ fn start_modbus_poll(
             // 批量发送结果到前端
             if !results.is_empty() {
                 let _ = app_clone.emit("modbus-poll-result", &results);
+            }
+
+            if connection_error {
+                if let Ok(mut polling) = polling_flag.lock() {
+                    *polling = false;
+                }
+                let _ = app_clone.emit("modbus-polling-stopped", "connection_error");
+                break;
             }
 
             // 轮询间隔

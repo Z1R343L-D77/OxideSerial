@@ -1,9 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import type { LogEntry } from "../types/serial";
 
-const MAX_LOGS = 2000;
-
-export function useTerminalLogs(locale: string) {
+export function useTerminalLogs(locale: string, maxLogs: number = 2000) {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const logIdRef = useRef(0);
   const logContainerRef = useRef<HTMLDivElement>(null);
@@ -17,8 +15,8 @@ export function useTerminalLogs(locale: string) {
     if (pendingLogs.current.length === 0) return;
     const batch = pendingLogs.current;
     pendingLogs.current = [];
-    setLogs((prev) => [...prev, ...batch].slice(-MAX_LOGS));
-  }, []);
+    setLogs((prev) => [...prev, ...batch].slice(-maxLogs));
+  }, [maxLogs]);
 
   const scheduleFlush = useCallback(() => {
     if (rafId.current === null) {

@@ -31,6 +31,10 @@ const renderMarkdownText = (text: string) => {
 export function TerminalPanel({ logs, logContainerRef, status, byteStats, onAddTextLog, onClearLogs, onExportLogs }: TerminalPanelProps) {
   const { t } = useTranslation();
 
+  const [searchQuery, setSearchQuery] = useState("");
+  const [autoScroll, setAutoScroll] = useState(true);
+  const autoScrollRef = useRef(true);
+
   const [sendMode, setSendMode] = useState<"ascii" | "hex">("ascii");
   const [showHex, setShowHex] = useState(false);
   const [showTimestamp, setShowTimestamp] = useState<boolean>(() => {
@@ -433,19 +437,47 @@ export function TerminalPanel({ logs, logContainerRef, status, byteStats, onAddT
   // 备注：虚拟列表 ref，用于自动滚动
   const listRef = useRef<ListImperativeAPI>(null);
 
-  // 备注：过滤后的日志
+  // 备注：过滤后的日志（含搜索过滤）
   const filteredLogs = useMemo(() => {
     return logs.filter((log) => {
       if (log.direction === "RX" && !showRx) return false;
       if (log.direction === "TX" && !showTx) return false;
+      if (searchQuery) {
+        const queryLower = searchQuery.toLowerCase();
+        const display = log.data || (showHex ? log.hex : (encoding === "gbk" ? (log.gbk ?? log.ascii) : log.ascii));
+        if (!display.toLowerCase().includes(queryLower)) return false;
+      }
       return true;
     });
-  }, [logs, showRx, showTx]);
+  }, [logs, showRx, showTx, searchQuery, showHex, encoding]);
+
+  const handleScroll = useCallback((event: React.UIEvent<HTMLDivElement>) => {
+    const listEl = event.currentTarget;
+    if (!listEl) return;
+    const clientHeight = listEl.clientHeight;
+    const scrollHeight = listEl.scrollHeight;
+    const scrollTop = listEl.scrollTop;
+
+    // 如果距离底部小于 40 像素，维持自动滚动状态
+    const isAtBottom = scrollTop >= scrollHeight - clientHeight - 40;
+    if (isAtBottom !== autoScrollRef.current) {
+      autoScrollRef.current = isAtBottom;
+      setAutoScroll(isAtBottom);
+    }
+  }, []);
+
+  const handleScrollToBottom = useCallback(() => {
+    autoScrollRef.current = true;
+    setAutoScroll(true);
+    if (listRef.current && filteredLogs.length > 0) {
+      listRef.current.scrollToRow({ index: filteredLogs.length - 1, align: "end" });
+    }
+  }, [filteredLogs.length]);
 
   // 备注：虚拟列表数据变更后自动滚动到底部
   const prevLengthRef = useRef(0);
   useEffect(() => {
-    if (filteredLogs.length > prevLengthRef.current && listRef.current) {
+    if (filteredLogs.length > prevLengthRef.current && listRef.current && autoScrollRef.current) {
       listRef.current.scrollToRow({ index: filteredLogs.length - 1, align: "end" });
     }
     prevLengthRef.current = filteredLogs.length;
@@ -601,6 +633,39 @@ export function TerminalPanel({ logs, logContainerRef, status, byteStats, onAddT
 
           <span className="toolbar-divider" />
 
+          {/* 搜索日志 */}
+          <div className="terminal-search-wrapper" style={{ position: "relative", display: "inline-flex", alignItems: "center" }}>
+            <input
+              type="text"
+              placeholder={t("terminal.searchPlaceholder", { defaultValue: "搜索..." })}
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="terminal-search-input"
+            />
+            {searchQuery && (
+              <button 
+                onClick={() => setSearchQuery("")} 
+                className="btn-clear-search"
+                style={{
+                  position: "absolute",
+                  right: "6px",
+                  background: "transparent",
+                  border: "none",
+                  color: "var(--text-muted)",
+                  cursor: "pointer",
+                  fontSize: "10px",
+                  padding: "2px",
+                  display: "flex",
+                  alignItems: "center"
+                }}
+              >
+                ✕
+              </button>
+            )}
+          </div>
+
+          <span className="toolbar-divider" />
+
           {/* 编码选择 */}
           <select 
             value={encoding} 
@@ -636,7 +701,7 @@ export function TerminalPanel({ logs, logContainerRef, status, byteStats, onAddT
           ref={logContainerRef} 
           role="log" 
           aria-live="polite"
-          style={{ flex: 1, fontSize: `${fontSize}px`, minWidth: 0 }}
+          style={{ flex: 1, fontSize: `${fontSize}px`, minWidth: 0, position: 'relative' }}
         >
           <List<any>
             listRef={listRef}
@@ -648,9 +713,16 @@ export function TerminalPanel({ logs, logContainerRef, status, byteStats, onAddT
               showHex,
               showTimestamp,
               encoding,
+              searchQuery,
             }}
             overscanCount={20}
+            onScroll={handleScroll}
           />
+          {!autoScroll && (
+            <button className="auto-scroll-lock-badge" onClick={handleScrollToBottom}>
+              <span className="badge-dot">●</span> {t("terminal.autoScrollLocked", { defaultValue: "自动滚动已锁定，点击返回底部" })}
+            </button>
+          )}
         </div>
         {showQuickSend && (
           <div className="quick-send-panel" style={{ width: `${quickSendWidth}px` }}>
@@ -911,14 +983,36 @@ export function TerminalPanel({ logs, logContainerRef, status, byteStats, onAddT
 
 
 
+const escapeRegExp = (string: string) => {
+  return string.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+};
+
+const highlightText = (text: string, query: string | undefined) => {
+  if (!query) return text;
+  try {
+    const escapedQuery = escapeRegExp(query);
+    const parts = text.split(new RegExp(`(${escapedQuery})`, "gi"));
+    return parts.map((part, i) =>
+      part.toLowerCase() === query.toLowerCase() ? (
+        <mark key={i} className="log-search-match">{part}</mark>
+      ) : (
+        part
+      )
+    );
+  } catch {
+    return text;
+  }
+};
+
 // 备注：虚拟列表行渲染器，移到组件外部并使用 React.memo，避免在 logs 追加时因类型重建导致完全销毁重建 DOM (极其卡顿)
-const LogRow = memo(({ index, style, filteredLogs, showHex, showTimestamp, encoding }: {
+const LogRow = memo(({ index, style, filteredLogs, showHex, showTimestamp, encoding, searchQuery }: {
   index: number;
   style: React.CSSProperties;
   filteredLogs: LogEntry[];
   showHex: boolean;
   showTimestamp: boolean;
   encoding: "utf-8" | "gbk";
+  searchQuery?: string;
 }) => {
   const log = filteredLogs[index];
   if (!log) return null;
@@ -932,7 +1026,7 @@ const LogRow = memo(({ index, style, filteredLogs, showHex, showTimestamp, encod
       <span className="log-dir">{log.direction}</span>
       <span className="log-data">
         {showTimestamp && <span className="log-time" style={{ color: "var(--text-muted)", marginRight: "6px" }}>[{log.timestamp}]</span>}
-        {display}
+        {highlightText(display, searchQuery)}
         {log.hex && <span className="log-len" style={{ color: "var(--text-muted)", marginLeft: "6px" }}>[{byteLen}B]</span>}
       </span>
     </div>
@@ -946,6 +1040,7 @@ const LogRow = memo(({ index, style, filteredLogs, showHex, showTimestamp, encod
     prev.showHex === next.showHex &&
     prev.showTimestamp === next.showTimestamp &&
     prev.encoding === next.encoding &&
+    prev.searchQuery === next.searchQuery &&
     prev.filteredLogs[prev.index] === next.filteredLogs[next.index]
   );
 });

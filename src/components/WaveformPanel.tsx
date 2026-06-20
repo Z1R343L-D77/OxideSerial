@@ -62,6 +62,64 @@ function clampIndex(index: number, length: number): number {
 
 type ViewMode = "auto" | "browse";
 
+function downsampleData(
+  timestamps: number[],
+  channels: (number | null)[][],
+  targetPoints: number = 2000
+): uPlot.AlignedData {
+  const total = timestamps.length;
+  if (total <= targetPoints || total === 0) {
+    return [timestamps, ...channels] as any;
+  }
+
+  const numChannels = channels.length;
+  const bucketSize = Math.floor(total / (targetPoints / 2));
+  if (bucketSize <= 1) {
+    return [timestamps, ...channels] as any;
+  }
+
+  const downsampledTimestamps: number[] = [];
+  const downsampledChannels: (number | null)[][] = Array.from({ length: numChannels }, () => []);
+
+  for (let i = 0; i < total; i += bucketSize) {
+    const end = Math.min(i + bucketSize, total);
+
+    const ch0 = channels[0];
+    let minIdx = i;
+    let maxIdx = i;
+
+    if (ch0) {
+      let minVal = ch0[i] ?? 0;
+      let maxVal = minVal;
+      for (let j = i + 1; j < end; j++) {
+        const v = ch0[j] ?? 0;
+        if (v < minVal) {
+          minVal = v;
+          minIdx = j;
+        }
+        if (v > maxVal) {
+          maxVal = v;
+          maxIdx = j;
+        }
+      }
+    } else {
+      minIdx = i;
+      maxIdx = Math.min(i + 1, end - 1);
+    }
+
+    const idxs = minIdx === maxIdx ? [minIdx] : (minIdx < maxIdx ? [minIdx, maxIdx] : [maxIdx, minIdx]);
+
+    for (const idx of idxs) {
+      downsampledTimestamps.push(timestamps[idx]);
+      for (let ch = 0; ch < numChannels; ch++) {
+        downsampledChannels[ch].push(channels[ch][idx]);
+      }
+    }
+  }
+
+  return [downsampledTimestamps, ...downsampledChannels] as any;
+}
+
 export function WaveformPanel({ theme }: { theme: string }) {
   const { t } = useTranslation();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -106,9 +164,22 @@ export function WaveformPanel({ theme }: { theme: string }) {
     }
   });
 
+  const [downsampleEnabled, setDownsampleEnabled] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem("waveform-downsample");
+      return saved === null ? true : saved === "true";
+    } catch {
+      return true;
+    }
+  });
+
   useEffect(() => {
     localStorage.setItem("waveform-sidebar-width", String(sidebarWidth));
   }, [sidebarWidth]);
+
+  useEffect(() => {
+    localStorage.setItem("waveform-downsample", String(downsampleEnabled));
+  }, [downsampleEnabled]);
 
   const handleResizerMouseDown = useCallback((mouseDownEvent: React.MouseEvent) => {
     mouseDownEvent.preventDefault();
@@ -154,8 +225,11 @@ export function WaveformPanel({ theme }: { theme: string }) {
 
   const buildAlignedData = useCallback((): uPlot.AlignedData => {
     const { timestamps, channels } = bufferRef.current;
+    if (downsampleEnabled) {
+      return downsampleData(timestamps, channels);
+    }
     return [timestamps, ...channels] as any;
-  }, []);
+  }, [downsampleEnabled]);
 
   const updateScrollbarAndInfo = useCallback((plot: uPlot) => {
     const track = scrollbarTrackRef.current;
@@ -1279,6 +1353,20 @@ export function WaveformPanel({ theme }: { theme: string }) {
                 onChange={(e) => setAutoPoints(Math.max(10, Number(e.target.value)))}
                 className="statusbar-input"
               />
+            </label>
+
+            <label
+              className="statusbar-item"
+              title={t("waveform.downsampleTooltip", { defaultValue: "开启高性能 MinMax 下采样数据抽稀，降低大缓冲区下的 GPU 负荷并完美保留信号极值" })}
+              style={{ display: "inline-flex", alignItems: "center", gap: "4px", cursor: "pointer", userSelect: "none" }}
+            >
+              <input
+                type="checkbox"
+                checked={downsampleEnabled}
+                onChange={(e) => setDownsampleEnabled(e.target.checked)}
+                style={{ cursor: "pointer" }}
+              />
+              {t("waveform.downsample", { defaultValue: "数据抽稀" })}
             </label>
 
             <button

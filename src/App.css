@@ -2960,3 +2960,81 @@ input[type="radio"] {
 .quick-send-modal-footer button:active {
   transform: scale(0.98);
 }
+
+/* ========== 搜索与自动滚动锁定样式 / Search & Scroll-Lock CSS ========== */
+
+.terminal-search-input {
+  height: 22px;
+  width: 110px;
+  padding: 0 18px 0 8px;
+  font-size: 11px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-primary);
+  outline: none;
+  transition: all 0.25s var(--ease-out);
+}
+
+.terminal-search-input:focus {
+  border-color: var(--accent);
+  width: 160px;
+  box-shadow: 0 0 8px rgba(232, 168, 73, 0.15);
+}
+
+.btn-clear-search {
+  transition: color 0.15s ease;
+}
+
+.btn-clear-search:hover {
+  color: var(--danger) !important;
+}
+
+.log-search-match {
+  background: color-mix(in srgb, var(--accent) 80%, transparent);
+  color: #1a1a1a;
+  border-radius: 2px;
+  padding: 0 2px;
+  margin: 0 1px;
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+}
+
+.auto-scroll-lock-badge {
+  position: absolute;
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: color-mix(in srgb, var(--bg-tertiary) 80%, transparent);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: var(--shadow-md), 0 0 0 1px rgba(255, 255, 255, 0.05);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  z-index: 10;
+  transition: all 0.2s ease;
+  animation: fade-up 0.2s ease-out;
+}
+
+.auto-scroll-lock-badge:hover {
+  background: var(--bg-tertiary);
+  border-color: var(--accent);
+  transform: translateX(-50%) translateY(-1px);
+}
+
+.auto-scroll-lock-badge:active {
+  transform: translateX(-50%) translateY(0);
+}
+
+.badge-dot {
+  color: var(--danger);
+  animation: pulse-soft 1s infinite;
+}

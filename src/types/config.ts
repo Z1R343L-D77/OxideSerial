@@ -2,7 +2,7 @@ export type ThemeOption = "light" | "dark" | "system";
 export type ViewMode = "terminal" | "waveform" | "split";
 
 // D3: 版本号单一来源
-export const APP_VERSION = "0.3.2";
+export const APP_VERSION = "0.3.3";
 
 export interface AppConfig {
   theme: ThemeOption;
@@ -10,6 +10,7 @@ export interface AppConfig {
   defaultViewMode: ViewMode;
   closeToTray: boolean;
   autostart: boolean;
+  maxLogs: number;
 }
 
 export const DEFAULT_CONFIG: AppConfig = {
@@ -18,4 +19,5 @@ export const DEFAULT_CONFIG: AppConfig = {
   defaultViewMode: "split",
   closeToTray: true,
   autostart: false,
+  maxLogs: 2000,
 };

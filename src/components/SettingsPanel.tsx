@@ -139,6 +139,25 @@ export function SettingsPanel({ config, onChange, onClose }: SettingsPanelProps)
         </div>
       </section>
 
+      {/* 备注：日志限制 */}
+      <section className="settings-section">
+        <label className="settings-label">{t("settings.general.maxLogs", { defaultValue: "终端日志限制" })}</label>
+        <div className="segmented-control">
+          {([1000, 2000, 5000, 10000, 50000] as number[]).map((val) => {
+            return (
+              <button
+                key={val}
+                className={config.maxLogs === val ? "active" : ""}
+                onClick={() => setConfigValue("maxLogs", val)}
+                title={t("settings.general.maxLogsTip", { val, defaultValue: `设置终端在内存中保留的最大日志条数，当前为 ${val} 条` })}
+              >
+                {val}
+              </button>
+            );
+          })}
+        </div>
+      </section>
+
       {/* 备注：开关选项 */}
       <section className="settings-section">
         <ToggleRow
