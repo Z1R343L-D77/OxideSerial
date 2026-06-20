@@ -141,7 +141,7 @@ function App() {
         setIsModbusPolling(false);
       });
     } else {
-      invoke("stop_modbus_poll").catch(() => {});
+      invoke("stop_modbus_poll").catch(() => { });
     }
   }, [isModbusPolling, status.connected, regConfigsStr, modbusInterval, modbusByteOrder]);
 
@@ -265,7 +265,7 @@ function App() {
           <button
             className={`function-nav-item ${activeFunction === "modbus" ? "active" : ""}`}
             onClick={() => setActiveFunction("modbus")}
-            title="Modbus RTU M表监测"
+            title={t("modbus.monitorTitle", { defaultValue: "Modbus RTU M表监测" })}
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M4 14.5a8 8 0 1 1 16 0" />
@@ -278,9 +278,9 @@ function App() {
           <button
             className={`function-nav-item disabled-nav ${activeFunction === "can" ? "active" : ""}`}
             onClick={() => {
-              addTextLog("INFO", "CAN总线监测功能正在规划中，敬请期待！");
+              addTextLog("INFO", t("serial.canUpcomingDesc", { defaultValue: "CAN总线监测功能正在规划中，敬请期待！" }));
             }}
-            title="CAN总线监测 (规划中)"
+            title={t("serial.canUpcomingTitle", { defaultValue: "CAN总线监测 (规划中)" })}
             style={{ opacity: 0.4 }}
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

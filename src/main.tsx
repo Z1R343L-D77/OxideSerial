@@ -48,56 +48,68 @@ const createGlobalTooltip = () => {
   const hideTooltip = () => {
     if (activeEl) {
       const content = activeEl.getAttribute('data-tooltip-content');
-      if (content) {
+      const currentTitle = activeEl.getAttribute('title');
+      if (content && !currentTitle) {
         activeEl.setAttribute('title', content);
-        activeEl.removeAttribute('data-tooltip-content');
       }
+      activeEl.removeAttribute('data-tooltip-content');
       activeEl = null;
     }
     tooltipEl.style.display = 'none';
   };
 
   document.addEventListener('mouseover', (e) => {
-    const el = e.target as HTMLElement;
-    if (!el || typeof el.closest !== 'function') return;
-    const target = el.closest('[title]') as HTMLElement | null;
-    if (!target) return;
+    try {
+      const el = e.target as HTMLElement;
+      if (!el || typeof el.closest !== 'function') return;
+      const target = el.closest('[title]') as HTMLElement | null;
+      if (!target) return;
 
-    if (activeEl && activeEl !== target) {
-      hideTooltip();
+      if (activeEl && activeEl !== target) {
+        hideTooltip();
+      }
+
+      activeEl = target;
+      const originalTitle = target.getAttribute('title') || '';
+      if (!originalTitle) return;
+
+      target.removeAttribute('title');
+      target.setAttribute('data-tooltip-content', originalTitle);
+
+      tooltipEl.textContent = originalTitle;
+      tooltipEl.style.display = 'block';
+      
+      const rect = target.getBoundingClientRect();
+      let top = rect.top - tooltipEl.offsetHeight - 8;
+      let left = rect.left + (rect.width - tooltipEl.offsetWidth) / 2;
+
+      if (top < 8) {
+        top = rect.bottom + 8;
+      }
+      if (left < 8) {
+        left = 8;
+      } else if (left + tooltipEl.offsetWidth > window.innerWidth - 8) {
+        left = window.innerWidth - tooltipEl.offsetWidth - 8;
+      }
+
+      tooltipEl.style.top = `${top}px`;
+      tooltipEl.style.left = `${left}px`;
+    } catch (err) {
+      console.error("Error in tooltip mouseover handler:", err);
     }
-
-    activeEl = target;
-    const originalTitle = target.getAttribute('title') || '';
-    if (!originalTitle) return;
-
-    target.removeAttribute('title');
-    target.setAttribute('data-tooltip-content', originalTitle);
-
-    tooltipEl.textContent = originalTitle;
-    tooltipEl.style.display = 'block';
-    
-    const rect = target.getBoundingClientRect();
-    let top = rect.top - tooltipEl.offsetHeight - 8;
-    let left = rect.left + (rect.width - tooltipEl.offsetWidth) / 2;
-
-    if (top < 8) {
-      top = rect.bottom + 8;
-    }
-    if (left < 8) {
-      left = 8;
-    } else if (left + tooltipEl.offsetWidth > window.innerWidth - 8) {
-      left = window.innerWidth - tooltipEl.offsetWidth - 8;
-    }
-
-    tooltipEl.style.top = `${top}px`;
-    tooltipEl.style.left = `${left}px`;
   }, true);
 
   document.addEventListener('mouseout', (e) => {
-    const el = e.target as HTMLElement;
-    if (activeEl && (!el || typeof el.closest !== 'function' || el.closest('[data-tooltip-content]') !== activeEl)) {
-      hideTooltip();
+    if (activeEl) {
+      try {
+        const related = e.relatedTarget;
+        if (!related || !(related instanceof Node) || !activeEl.contains(related)) {
+          hideTooltip();
+        }
+      } catch (err) {
+        console.error("Error in tooltip mouseout handler:", err);
+        hideTooltip();
+      }
     }
   }, true);
 

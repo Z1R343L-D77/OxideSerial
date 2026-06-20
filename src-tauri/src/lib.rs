@@ -1738,6 +1738,42 @@ fn start_modbus_poll(
 
     Ok(())
 }
+#[tauri::command]
+fn open_url(url: String) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        let status = std::process::Command::new("cmd")
+            .args(&["/c", "start", "", &url])
+            .status();
+        match status {
+            Ok(s) if s.success() => Ok(()),
+            Ok(s) => Err(format!("cmd returned non-zero status: {:?}", s)),
+            Err(e) => Err(e.to_string()),
+        }
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let status = std::process::Command::new("open")
+            .arg(&url)
+            .status();
+        match status {
+            Ok(s) if s.success() => Ok(()),
+            Ok(s) => Err(format!("open returned non-zero status: {:?}", s)),
+            Err(e) => Err(e.to_string()),
+        }
+    }
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+    {
+        let status = std::process::Command::new("xdg-open")
+            .arg(&url)
+            .status();
+        match status {
+            Ok(s) if s.success() => Ok(()),
+            Ok(s) => Err(format!("xdg-open returned non-zero status: {:?}", s)),
+            Err(e) => Err(e.to_string()),
+        }
+    }
+}
 
 #[tauri::command]
 fn stop_modbus_poll(state: tauri::State<AppState>) -> Result<(), String> {
@@ -1832,6 +1868,7 @@ pub fn run() {
             start_modbus_poll,
             stop_modbus_poll,
             write_modbus_register,
+            open_url,
         ])
         .setup(|app| {
             // 备注：系统托盘菜单

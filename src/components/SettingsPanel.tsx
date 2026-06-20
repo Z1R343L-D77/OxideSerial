@@ -37,7 +37,7 @@ export function SettingsPanel({ config, onChange, onClose }: SettingsPanelProps)
       if (enabled !== config.autostart) {
         setConfigValue("autostart", enabled);
       }
-    }).catch(() => {});
+    }).catch(() => { });
   }, []);
 
   const handleAutostartToggle = useCallback(async (v: boolean) => {
@@ -58,8 +58,8 @@ export function SettingsPanel({ config, onChange, onClose }: SettingsPanelProps)
       {/* 备注：标题栏 */}
       <div className="settings-header">
         <h3>{t("settings.title", { defaultValue: "设置" })}</h3>
-        <button 
-          className="btn-close" 
+        <button
+          className="btn-close"
           onClick={onClose}
           title={t("settings.closeTip", { defaultValue: "关闭设置面板" })}
         >
@@ -174,8 +174,8 @@ export function SettingsPanel({ config, onChange, onClose }: SettingsPanelProps)
 // 备注：开关行组件（键盘可访问）
 function ToggleRow({ label, checked, title, onChange }: { label: string; checked: boolean; title?: string; onChange: (v: boolean) => void }) {
   return (
-    <div 
-      className="toggle-row" 
+    <div
+      className="toggle-row"
       title={title}
       onClick={() => onChange(!checked)}
       style={{ cursor: "pointer" }}

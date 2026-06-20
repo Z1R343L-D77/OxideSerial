@@ -1,5 +1,6 @@
 import { useState, useRef } from "react";
 import { useTranslation } from "react-i18next";
+import { invoke } from "@tauri-apps/api/core";
 import type { SerialConfig, SerialStatus } from "../types/serial";
 import type { ModbusRegister, ByteOrderOption } from "../types/modbus";
 
@@ -402,6 +403,11 @@ export function Sidebar({
                 </select>
                 <a
                   href="https://github.com/Z1R343L-D77/OxideSerial#readme"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    invoke("open_url", { url: "https://github.com/Z1R343L-D77/OxideSerial#readme" })
+                      .catch(err => console.error("Failed to open URL:", err));
+                  }}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="btn-docs-question"
@@ -674,16 +680,16 @@ printf("1.1, 3.2, -0.6, -0.9\\n")`}
         </>
       ) : (
         <section className="panel">
-          <h3>CAN总线监测</h3>
+          <h3>{t("serial.canTitle", { defaultValue: "CAN总线监测" })}</h3>
           <p style={{ color: "var(--text-secondary)", fontSize: "12px", margin: "10px 0" }}>
-            当前功能规划中，后续将加入此监测表。
+            {t("serial.canDesc", { defaultValue: "当前功能规划中，后续将加入此监测表。" })}
           </p>
           <div style={{ opacity: 0.3, pointerEvents: "none" }}>
             <div className="form-group">
-              <label>波特率</label>
+              <label>{t("serial.canBaudRate", { defaultValue: "波特率" })}</label>
               <select defaultValue="250k"><option>250k</option></select>
             </div>
-            <button className="btn-connect" style={{ marginTop: "10px" }}>打开CAN通道</button>
+            <button className="btn-connect" style={{ marginTop: "10px" }}>{t("serial.canConnect", { defaultValue: "打开CAN通道" })}</button>
           </div>
         </section>
       )}

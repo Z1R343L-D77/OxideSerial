@@ -173,25 +173,25 @@ export function ModbusMonitor({
               <path d="M4 14.5a8 8 0 1 1 16 0M2 18h20" />
               <path d="M12 4v2" />
             </svg>
-            <p>监测表为空。请在左侧侧边栏中配置并“添加寄存器”到本表中。</p>
+            <p>{t("modbus.emptyList", { defaultValue: "监测表为空。请在左侧侧边栏中配置并“添加寄存器”到本表中。" })}</p>
             <span style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "6px" }}>
-              💡 小提示：您可以双击行内的【别名】和【地址】来直接在线修改。
+              {t("modbus.doubleClickTip", { defaultValue: "💡 小提示：您可以双击行内的【别名】和【地址】来直接在线修改。" })}
             </span>
           </div>
         ) : (
           <table className="modbus-monitor-table">
             <thead>
               <tr>
-                <th style={{ width: "40px", textAlign: "center" }}>启用</th>
-                <th>别名 (双击编辑)</th>
-                <th style={{ width: "80px" }}>从站 ID</th>
-                <th style={{ width: "80px" }}>功能码</th>
-                <th style={{ width: "90px" }}>地址 (双击)</th>
-                <th style={{ width: "100px" }}>类型</th>
-                <th style={{ textAlign: "right", minWidth: "120px" }}>当前监测值</th>
-                <th style={{ width: "110px", textAlign: "center" }}>状态</th>
-                <th style={{ width: "110px", textAlign: "center" }}>更新时间</th>
-                <th style={{ width: "100px", textAlign: "center" }}>操作</th>
+                <th style={{ width: "40px", textAlign: "center" }}>{t("modbus.tableEnable", { defaultValue: "启用" })}</th>
+                <th>{t("modbus.tableAlias", { defaultValue: "别名 (双击编辑)" })}</th>
+                <th style={{ width: "80px" }}>{t("modbus.tableSlaveId", { defaultValue: "从站 ID" })}</th>
+                <th style={{ width: "80px" }}>{t("modbus.tableFunctionCode", { defaultValue: "功能码" })}</th>
+                <th style={{ width: "90px" }}>{t("modbus.tableAddress", { defaultValue: "地址 (双击)" })}</th>
+                <th style={{ width: "100px" }}>{t("modbus.tableType", { defaultValue: "类型" })}</th>
+                <th style={{ textAlign: "right", minWidth: "120px" }}>{t("modbus.tableValue", { defaultValue: "当前监测值" })}</th>
+                <th style={{ width: "110px", textAlign: "center" }}>{t("modbus.tableStatus", { defaultValue: "状态" })}</th>
+                <th style={{ width: "110px", textAlign: "center" }}>{t("modbus.tableUpdatedTime", { defaultValue: "更新时间" })}</th>
+                <th style={{ width: "100px", textAlign: "center" }}>{t("modbus.tableActions", { defaultValue: "操作" })}</th>
               </tr>
             </thead>
             <tbody>
@@ -367,8 +367,8 @@ export function ModbusMonitor({
                     onChange={(e) => setWriteValue(e.target.value)}
                     className="modal-select-input"
                   >
-                    <option value="ON">ON (开 / 0xFF00)</option>
-                    <option value="OFF">OFF (关 / 0x0000)</option>
+                    <option value="ON">{t("modbus.boolOn", { defaultValue: "ON (开 / 0xFF00)" })}</option>
+                    <option value="OFF">{t("modbus.boolOff", { defaultValue: "OFF (关 / 0x0000)" })}</option>
                   </select>
                 ) : (
                   <input

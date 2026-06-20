@@ -147,6 +147,8 @@ export function WaveformPanel({ theme }: { theme: string }) {
   const totalPointsValRef = useRef<HTMLSpanElement>(null);
   const visiblePointsValRef = useRef<HTMLSpanElement>(null);
   const timeDivValRef = useRef<HTMLSpanElement>(null);
+  const cursorDotRef = useRef<HTMLDivElement>(null);
+  const scrollbarTooltipRef = useRef<HTMLDivElement>(null);
 
 
 
@@ -237,14 +239,34 @@ export function WaveformPanel({ theme }: { theme: string }) {
     const trackWidth = track.clientWidth;
     if (trackWidth === 0) return;
 
-    const visibleRatio = Math.min(1, visibleCount / total);
-    const thumbWidth = Math.max(20, visibleRatio * trackWidth);
-    const startRatio = total > 1 ? idxMin / (total - 1) : 0;
-    const maxLeft = trackWidth - thumbWidth;
-    const thumbLeft = startRatio * maxLeft;
+    const leftRatio = total > 1 ? idxMin / (total - 1) : 0;
+    const rightRatio = total > 1 ? idxMax / (total - 1) : 1;
 
-    thumb.style.width = `${thumbWidth}px`;
+    let thumbLeft = leftRatio * trackWidth;
+    let thumbWidth = (rightRatio - leftRatio) * trackWidth;
+
+    if (thumbWidth < 12) {
+      thumbWidth = 12;
+      if (rightRatio > 0.99) {
+        thumbLeft = trackWidth - thumbWidth;
+      }
+    }
+
+    thumbLeft = Math.max(0, Math.min(trackWidth - thumbWidth, thumbLeft));
+
     thumb.style.left = `${thumbLeft}px`;
+    thumb.style.width = `${thumbWidth}px`;
+
+    // Dynamic Scrollbar Tooltip Content Update
+    if (scrollbarTooltipRef.current) {
+      const duration = timestamps[idxMax] - timestamps[idxMin];
+      const durationMs = (duration * 1000).toFixed(0);
+      scrollbarTooltipRef.current.innerHTML = `
+        <div class="sb-tooltip-row"><strong>可视采样点:</strong> <span>[${idxMin}, ${idxMax}]</span></div>
+        <div class="sb-tooltip-row"><strong>可视点数量:</strong> <span>${visibleCount}/ch</span></div>
+        <div class="sb-tooltip-row"><strong>时间段长度:</strong> <span>${durationMs}ms</span></div>
+      `;
+    }
   }, [bufferLimit]);
 
   const renderChart = useCallback((resetScales: boolean) => {
@@ -320,23 +342,37 @@ export function WaveformPanel({ theme }: { theme: string }) {
     if (total === 0) return;
 
     const trackWidth = track.clientWidth;
-    const thumbWidth = thumb.offsetWidth;
-    const maxLeft = trackWidth - thumbWidth;
-    if (maxLeft <= 0) return;
+    if (trackWidth === 0) return;
 
     const startX = mouseDownEvent.clientX;
     const startLeft = thumb.offsetLeft;
+    const currentThumbWidth = thumb.offsetWidth;
 
     const xScale = chart.scales.x;
     if (xScale.min == null || xScale.max == null) return;
 
     let idxMin = 0;
     let idxMax = total - 1;
-    for (let i = 0; i < total; i++) {
-      if (timestamps[i] >= xScale.min) { idxMin = i; break; }
+    let low = 0, high = total - 1;
+    while (low <= high) {
+      const mid = (low + high) >> 1;
+      if (timestamps[mid] >= xScale.min) {
+        idxMin = mid;
+        high = mid - 1;
+      } else {
+        low = mid + 1;
+      }
     }
-    for (let i = total - 1; i >= 0; i--) {
-      if (timestamps[i] <= xScale.max) { idxMax = i; break; }
+    low = 0;
+    high = total - 1;
+    while (low <= high) {
+      const mid = (low + high) >> 1;
+      if (timestamps[mid] <= xScale.max) {
+        idxMax = mid;
+        low = mid + 1;
+      } else {
+        high = mid - 1;
+      }
     }
     const visibleCount = idxMax - idxMin + 1;
 
@@ -347,11 +383,16 @@ export function WaveformPanel({ theme }: { theme: string }) {
 
     const handleMouseMove = (moveEvent: MouseEvent) => {
       const deltaX = moveEvent.clientX - startX;
-      let nextLeft = Math.max(0, Math.min(maxLeft, startLeft + deltaX));
+      let nextLeft = Math.max(0, Math.min(trackWidth - currentThumbWidth, startLeft + deltaX));
 
-      const startRatio = nextLeft / maxLeft;
-      const targetStartIdx = Math.round(startRatio * (total - visibleCount));
-      const targetEndIdx = Math.min(total - 1, targetStartIdx + visibleCount - 1);
+      const leftRatio = nextLeft / trackWidth;
+      const rightRatio = (nextLeft + currentThumbWidth) / trackWidth;
+
+      let targetStartIdx = Math.round(leftRatio * (total - 1));
+      let targetEndIdx = Math.round(rightRatio * (total - 1));
+
+      targetEndIdx = Math.min(total - 1, targetStartIdx + visibleCount - 1);
+      targetStartIdx = Math.max(0, targetEndIdx - visibleCount + 1);
 
       if (targetStartIdx >= 0 && targetEndIdx < total) {
         chart.setScale("x", {
@@ -385,22 +426,36 @@ export function WaveformPanel({ theme }: { theme: string }) {
     const rect = track.getBoundingClientRect();
     const clickX = mouseDownEvent.clientX - rect.left;
     const trackWidth = track.clientWidth;
-    const thumbWidth = thumb.offsetWidth;
+    const currentThumbWidth = thumb.offsetWidth;
 
-    let targetLeft = clickX - thumbWidth / 2;
-    const maxLeft = trackWidth - thumbWidth;
-    targetLeft = Math.max(0, Math.min(maxLeft, targetLeft));
+    let targetLeft = clickX - currentThumbWidth / 2;
+    targetLeft = Math.max(0, Math.min(trackWidth - currentThumbWidth, targetLeft));
 
     const xScale = chart.scales.x;
     if (xScale.min == null || xScale.max == null) return;
 
     let idxMin = 0;
     let idxMax = total - 1;
-    for (let i = 0; i < total; i++) {
-      if (timestamps[i] >= xScale.min) { idxMin = i; break; }
+    let low = 0, high = total - 1;
+    while (low <= high) {
+      const mid = (low + high) >> 1;
+      if (timestamps[mid] >= xScale.min) {
+        idxMin = mid;
+        high = mid - 1;
+      } else {
+        low = mid + 1;
+      }
     }
-    for (let i = total - 1; i >= 0; i--) {
-      if (timestamps[i] <= xScale.max) { idxMax = i; break; }
+    low = 0;
+    high = total - 1;
+    while (low <= high) {
+      const mid = (low + high) >> 1;
+      if (timestamps[mid] <= xScale.max) {
+        idxMax = mid;
+        low = mid + 1;
+      } else {
+        high = mid - 1;
+      }
     }
     const visibleCount = idxMax - idxMin + 1;
 
@@ -409,15 +464,169 @@ export function WaveformPanel({ theme }: { theme: string }) {
       setViewMode("browse");
     }
 
-    const startRatio = maxLeft > 0 ? targetLeft / maxLeft : 0;
-    const targetStartIdx = Math.round(startRatio * (total - visibleCount));
-    const targetEndIdx = Math.min(total - 1, targetStartIdx + visibleCount - 1);
+    const leftRatio = targetLeft / trackWidth;
+    const rightRatio = (targetLeft + currentThumbWidth) / trackWidth;
+
+    let targetStartIdx = Math.round(leftRatio * (total - 1));
+    let targetEndIdx = Math.round(rightRatio * (total - 1));
+
+    targetEndIdx = Math.min(total - 1, targetStartIdx + visibleCount - 1);
+    targetStartIdx = Math.max(0, targetEndIdx - visibleCount + 1);
 
     if (targetStartIdx >= 0 && targetEndIdx < total) {
       chart.setScale("x", {
         min: timestamps[targetStartIdx],
         max: timestamps[targetEndIdx],
       });
+    }
+  }, []);
+
+  const handleScrollbarLeftHandleMouseDown = useCallback((mouseDownEvent: ReactMouseEvent<HTMLDivElement>) => {
+    mouseDownEvent.preventDefault();
+    mouseDownEvent.stopPropagation();
+    const chart = chartRef.current;
+    const track = scrollbarTrackRef.current;
+    if (!chart || !track) return;
+
+    const { timestamps } = bufferRef.current;
+    const total = timestamps.length;
+    if (total === 0) return;
+
+    const xScale = chart.scales.x;
+    if (xScale.min == null || xScale.max == null) return;
+
+    const isCurrentlyAuto = viewModeRef.current === "auto";
+    const currentMaxTime = xScale.max;
+
+    let idxMax = total - 1;
+    if (!isCurrentlyAuto) {
+      let low = 0, high = total - 1;
+      while (low <= high) {
+        const mid = (low + high) >> 1;
+        if (timestamps[mid] <= currentMaxTime) {
+          idxMax = mid;
+          low = mid + 1;
+        } else {
+          high = mid - 1;
+        }
+      }
+    }
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const rect = track.getBoundingClientRect();
+      const clickX = moveEvent.clientX - rect.left;
+      const ratio = Math.max(0, Math.min(1, clickX / rect.width));
+      let targetStartIdx = Math.round(ratio * (total - 1));
+
+      targetStartIdx = Math.min(idxMax - 10, targetStartIdx);
+      targetStartIdx = Math.max(0, targetStartIdx);
+
+      if (isCurrentlyAuto) {
+        const newAutoPoints = total - targetStartIdx;
+        setAutoPoints(Math.max(10, newAutoPoints));
+      } else {
+        chart.setScale("x", {
+          min: timestamps[targetStartIdx],
+          max: currentMaxTime,
+        });
+      }
+    };
+
+    const handleMouseUp = () => {
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
+    };
+
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseup", handleMouseUp);
+  }, []);
+
+  const handleScrollbarRightHandleMouseDown = useCallback((mouseDownEvent: ReactMouseEvent<HTMLDivElement>) => {
+    mouseDownEvent.preventDefault();
+    mouseDownEvent.stopPropagation();
+    const chart = chartRef.current;
+    const track = scrollbarTrackRef.current;
+    if (!chart || !track) return;
+
+    const { timestamps } = bufferRef.current;
+    const total = timestamps.length;
+    if (total === 0) return;
+
+    const xScale = chart.scales.x;
+    if (xScale.min == null || xScale.max == null) return;
+
+    const currentMinTime = xScale.min;
+
+    let idxMin = 0;
+    let low = 0, high = total - 1;
+    while (low <= high) {
+      const mid = (low + high) >> 1;
+      if (timestamps[mid] >= currentMinTime) {
+        idxMin = mid;
+        high = mid - 1;
+      } else {
+        low = mid + 1;
+      }
+    }
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const rect = track.getBoundingClientRect();
+      const clickX = moveEvent.clientX - rect.left;
+      const ratio = Math.max(0, Math.min(1, clickX / rect.width));
+      let targetEndIdx = Math.round(ratio * (total - 1));
+
+      targetEndIdx = Math.max(idxMin + 10, targetEndIdx);
+      targetEndIdx = Math.min(total - 1, targetEndIdx);
+
+      if (ratio >= 0.99) {
+        if (viewModeRef.current !== "auto") {
+          viewModeRef.current = "auto";
+          setViewMode("auto");
+        }
+        const newAutoPoints = total - idxMin;
+        setAutoPoints(Math.max(10, newAutoPoints));
+      } else {
+        if (viewModeRef.current !== "browse") {
+          viewModeRef.current = "browse";
+          setViewMode("browse");
+        }
+        chart.setScale("x", {
+          min: currentMinTime,
+          max: timestamps[targetEndIdx],
+        });
+      }
+    };
+
+    const handleMouseUp = () => {
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
+    };
+
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseup", handleMouseUp);
+  }, []);
+
+  const handleScrollbarTrackMouseMove = useCallback((e: ReactMouseEvent<HTMLDivElement>) => {
+    const track = scrollbarTrackRef.current;
+    const tooltip = scrollbarTooltipRef.current;
+    if (!track || !tooltip) return;
+
+    const rect = track.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+
+    tooltip.style.display = "flex";
+
+    let tooltipLeft = x;
+    const tooltipWidth = tooltip.offsetWidth || 180;
+
+    tooltipLeft = Math.max(tooltipWidth / 2, Math.min(rect.width - tooltipWidth / 2, tooltipLeft));
+
+    tooltip.style.left = `${tooltipLeft}px`;
+  }, []);
+
+  const handleScrollbarTrackMouseLeave = useCallback(() => {
+    if (scrollbarTooltipRef.current) {
+      scrollbarTooltipRef.current.style.display = "none";
     }
   }, []);
 
@@ -536,6 +745,9 @@ export function WaveformPanel({ theme }: { theme: string }) {
                 if (tooltipRef.current) {
                   tooltipRef.current.style.display = "none";
                 }
+                if (cursorDotRef.current) {
+                  cursorDotRef.current.style.display = "none";
+                }
                 if (cursorTextRef.current) {
                   const { timestamps, channels } = bufferRef.current;
                   if (timestamps.length > 0) {
@@ -553,6 +765,15 @@ export function WaveformPanel({ theme }: { theme: string }) {
               if (timestamps.length === 0) return;
 
               const dataIndex = clampIndex(Math.round(plot.posToIdx(left)), timestamps.length);
+
+              // Position the cyan cursor dot on the scrollbar track
+              if (cursorDotRef.current && scrollbarTrackRef.current) {
+                const trackWidth = scrollbarTrackRef.current.clientWidth;
+                const ratio = timestamps.length > 1 ? dataIndex / (timestamps.length - 1) : 0;
+                const dotLeft = ratio * trackWidth;
+                cursorDotRef.current.style.display = "block";
+                cursorDotRef.current.style.left = `${dotLeft}px`;
+              }
 
               // 计算 y 轴方向上距离鼠标最近的可见通道
               let minDistance = Number.POSITIVE_INFINITY;
@@ -884,6 +1105,14 @@ export function WaveformPanel({ theme }: { theme: string }) {
       [new Float64Array(0), ...Array.from({ length: channelCount }, () => new Float64Array(0))],
       true,
     );
+    // Explicitly reset scrollbar visual state and info labels on clear
+    const thumb = scrollbarThumbRef.current;
+    if (thumb) {
+      thumb.style.width = "100%";
+      thumb.style.left = "0px";
+    }
+    if (visiblePointsValRef.current) visiblePointsValRef.current.textContent = "0";
+    if (timeDivValRef.current) timeDivValRef.current.textContent = "--/X-div";
   };
 
   const handleWheel = useCallback((event: ReactWheelEvent<HTMLDivElement>) => {
@@ -1000,92 +1229,136 @@ export function WaveformPanel({ theme }: { theme: string }) {
         >
           <div ref={tooltipRef} className="waveform-tooltip" style={{ display: "none", position: "absolute", pointerEvents: "none", zIndex: 10 }} />
         </div>
-        <div className="waveform-scrollbar-container">
-          <div 
-            className="waveform-scrollbar-track" 
-            ref={scrollbarTrackRef} 
-            onMouseDown={handleScrollbarTrackMouseDown}
-          >
-            <div 
-              className="waveform-scrollbar-thumb" 
-              ref={scrollbarThumbRef} 
-              onMouseDown={handleScrollbarThumbMouseDown}
+        {/* Combined VOFA+ Style Control Panel */}
+        <div className="waveform-control-panel">
+          {/* Row 1: Parameters Row */}
+          <div className="waveform-control-row">
+            <label
+              className="statusbar-item"
+              title={t("waveform.deltaTTooltip", { defaultValue: "设置波形刷新渲染的最小间隔时间（毫秒），数值越小刷新频率越高，默认为 50ms (20Hz)" })}
+            >
+              {t("waveform.deltaT", { defaultValue: "△t" })}:
+              <input
+                type="number"
+                min={1}
+                value={deltaT}
+                onChange={(e) => setDeltaT(Math.max(1, Number(e.target.value)))}
+                className="statusbar-input"
+              />
+              ms
+              <span className="hz-label">
+                ({(1000 / deltaT).toFixed(1)} Hz)
+              </span>
+            </label>
+
+            <label
+              className="statusbar-item"
+              title={t("waveform.bufferLimitTooltip", { defaultValue: "设置每个通道在内存中保留的最大采样点数，超出上限的老数据将被淘汰，默认为 50000" })}
+            >
+              {t("waveform.bufferLimit", { defaultValue: "缓冲区上限" })}:
+              <input
+                type="number"
+                min={1000}
+                step={1000}
+                value={bufferLimit}
+                onChange={(e) => setBufferLimit(Math.max(1000, Number(e.target.value)))}
+                className="statusbar-input"
+              />
+              {t("waveform.perChannel", { defaultValue: "/ch" })}
+            </label>
+
+            <label
+              className="statusbar-item"
+              title={t("waveform.autoPointsTooltip", { defaultValue: "设定在 Auto 模式下 X 轴可视区域内能容纳显示的数据点个数，默认为 100" })}
+            >
+              {t("waveform.autoPoints", { defaultValue: "Auto点数对齐" })}:
+              <input
+                type="number"
+                min={10}
+                value={autoPoints}
+                onChange={(e) => setAutoPoints(Math.max(10, Number(e.target.value)))}
+                className="statusbar-input"
+              />
+            </label>
+
+            <button
+              className={`btn-small btn-lock-auto ${viewMode === "auto" ? "btn-active" : ""}`}
+              onClick={handleAuto}
+            >
+              Auto
+            </button>
+          </div>
+
+          {/* Row 2: Scrollbar Container */}
+          <div className="waveform-scrollbar-container">
+            <div
+              className="waveform-scrollbar-track"
+              ref={scrollbarTrackRef}
+              onMouseDown={handleScrollbarTrackMouseDown}
+              onMouseMove={handleScrollbarTrackMouseMove}
+              onMouseLeave={handleScrollbarTrackMouseLeave}
+            >
+              <div
+                className="waveform-scrollbar-thumb"
+                ref={scrollbarThumbRef}
+                onMouseDown={handleScrollbarThumbMouseDown}
+                style={{ left: 0, width: "100%" }}
+              >
+                {/* Left (Red) drag handle */}
+                <div
+                  className="scrollbar-handle handle-left"
+                  onMouseDown={handleScrollbarLeftHandleMouseDown}
+                />
+                {/* Right (Purple) drag handle */}
+                <div
+                  className="scrollbar-handle handle-right"
+                  onMouseDown={handleScrollbarRightHandleMouseDown}
+                />
+              </div>
+
+              {/* Cyan cursor dot */}
+              <div
+                className="scrollbar-cursor-dot"
+                ref={cursorDotRef}
+                style={{ display: "none" }}
+              />
+            </div>
+
+            {/* Scrollbar Tooltip */}
+            <div
+              ref={scrollbarTooltipRef}
+              className="waveform-scrollbar-tooltip"
+              style={{ display: "none" }}
             />
           </div>
-        </div>
-        <div className="waveform-info-bar">
-          <button 
-            className="btn-clear-trash" 
-            onClick={handleClear}
-            onContextMenu={(e) => e.preventDefault()}
-            title={t("waveform.clearTooltip", { defaultValue: "左键: 清空采样数据\n右键: 设置不弹出警告" })}
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="3 6 5 6 21 6"></polyline>
-              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-              <line x1="10" y1="11" x2="10" y2="17"></line>
-              <line x1="14" y1="11" x2="14" y2="17"></line>
-            </svg>
-          </button>
-          <span className="info-item" title={t("waveform.bufferActiveTooltip", { defaultValue: "当前缓冲区有效数据: 0/ch" })}>
-            <span ref={totalPointsValRef} className="info-label-value">0 / {bufferLimit}</span>
-          </span>
-          <span className="info-divider">|</span>
-          <span className="info-item" title={t("waveform.visiblePointsTooltip", { defaultValue: "当前屏幕可视区域数据点数" })}>
-            <span ref={visiblePointsValRef} className="info-label-value">0</span>
-          </span>
-          <span className="info-divider">|</span>
-          <span className="info-item" title={t("waveform.timeDivTooltip", { defaultValue: "时间轴网格间距分度值 (X-div)" })}>
-            <span ref={timeDivValRef} className="info-label-value">--/X-div</span>
-          </span>
-        </div>
-        {/* 备注：状态栏 - 可调参数 */}
-        <div className="waveform-statusbar">
-          <label 
-            className="statusbar-item"
-            title={t("waveform.deltaTTooltip", { defaultValue: "设置波形刷新渲染的最小间隔时间（毫秒），数值越小刷新频率越高，默认为 50ms (20Hz)" })}
-          >
-            {t("waveform.deltaT", { defaultValue: "△t" })}:
-            <input
-              type="number"
-              min={1}
-              value={deltaT}
-              onChange={(e) => setDeltaT(Math.max(1, Number(e.target.value)))}
-              className="statusbar-input"
-            />
-            ms
-            <span style={{ color: "var(--text-muted)", marginLeft: 4 }}>
-              ({(1000 / deltaT).toFixed(1)} Hz)
+
+          {/* Row 3: Info Bar */}
+          <div className="waveform-info-bar">
+            <button
+              className="btn-clear-trash"
+              onClick={handleClear}
+              onContextMenu={(e) => e.preventDefault()}
+              title={t("waveform.clearTooltip", { defaultValue: "左键: 清空采样数据\n右键: 设置不弹出警告" })}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="3 6 5 6 21 6"></polyline>
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                <line x1="10" y1="11" x2="10" y2="17"></line>
+                <line x1="14" y1="11" x2="14" y2="17"></line>
+              </svg>
+            </button>
+            <span className="info-item" title={t("waveform.bufferActiveTooltip", { defaultValue: "当前缓冲区有效数据: 0/ch" })}>
+              <span ref={totalPointsValRef} className="info-label-value">0 / {bufferLimit}</span>
             </span>
-          </label>
-          <label 
-            className="statusbar-item"
-            title={t("waveform.bufferLimitTooltip", { defaultValue: "设置每个通道在内存中保留的最大采样点数，超出上限的老数据将被淘汰，默认为 50000" })}
-          >
-            {t("waveform.bufferLimit", { defaultValue: "缓冲区上限" })}:
-            <input
-              type="number"
-              min={1000}
-              step={1000}
-              value={bufferLimit}
-              onChange={(e) => setBufferLimit(Math.max(1000, Number(e.target.value)))}
-              className="statusbar-input"
-            />
-            {t("waveform.perChannel", { defaultValue: "/ch" })}
-          </label>
-          <label 
-            className="statusbar-item"
-            title={t("waveform.autoPointsTooltip", { defaultValue: "设定在 Auto 模式下 X 轴可视区域内能容纳显示的数据点个数，默认为 100" })}
-          >
-            {t("waveform.autoPoints", { defaultValue: "Auto点数对齐" })}:
-            <input
-              type="number"
-              min={10}
-              value={autoPoints}
-              onChange={(e) => setAutoPoints(Math.max(10, Number(e.target.value)))}
-              className="statusbar-input"
-            />
-          </label>
+            <span className="info-divider">|</span>
+            <span className="info-item" title={t("waveform.visiblePointsTooltip", { defaultValue: "当前屏幕可视区域数据点数" })}>
+              <span ref={visiblePointsValRef} className="info-label-value">0</span>
+            </span>
+            <span className="info-divider">|</span>
+            <span className="info-item" title={t("waveform.timeDivTooltip", { defaultValue: "时间轴网格间距分度值 (X-div)" })}>
+              <span ref={timeDivValRef} className="info-label-value">--/X-div</span>
+            </span>
+          </div>
         </div>
       </div>
 

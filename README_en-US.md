@@ -49,6 +49,7 @@ Most serial debugging tools either have outdated UIs, rely on Java/Python runtim
 - HEX toggle switches all history display in real time
 - Send mode auto-converts input (ASCII↔HEX space handling)
 - Line ending options (none / LF / CR / CRLF / LFCR)
+- Quick Send panel (10 configurable items with comments, delay, HEX mode)
 - Send history (last 20 entries, click to recall)
 - Auto-send with configurable interval
 - Timestamp follows language setting

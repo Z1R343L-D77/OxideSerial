@@ -39,7 +39,8 @@ export function useTerminalLogs(locale: string) {
   const addLog = useCallback((direction: string, hex: string, ascii: string, timestamp?: string) => {
     const id = ++logIdRef.current;
     const time = timestamp || new Date().toLocaleTimeString(locale, { hour12: false });
-    pendingLogs.current.push({ id, timestamp: time, direction, data: "", hex, ascii });
+    const gbk = hex ? decodeLogEntry(hex, ascii, "gbk") : ascii;
+    pendingLogs.current.push({ id, timestamp: time, direction, data: "", hex, ascii, gbk });
     scheduleFlush();
   }, [locale, scheduleFlush]);
 
@@ -47,7 +48,7 @@ export function useTerminalLogs(locale: string) {
   const addTextLog = useCallback((direction: string, text: string) => {
     const id = ++logIdRef.current;
     const timestamp = new Date().toLocaleTimeString(locale, { hour12: false });
-    pendingLogs.current.push({ id, timestamp, direction, data: text, hex: "", ascii: text });
+    pendingLogs.current.push({ id, timestamp, direction, data: text, hex: "", ascii: text, gbk: text });
     scheduleFlush();
   }, [locale, scheduleFlush]);
 

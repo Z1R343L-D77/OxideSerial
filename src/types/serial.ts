@@ -51,4 +51,5 @@ export interface LogEntry {
   data: string;
   hex: string;
   ascii: string;
+  gbk?: string;
 }
