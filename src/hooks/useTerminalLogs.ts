@@ -107,7 +107,7 @@ function decodeLogEntry(hexStr: string, asciiStr: string, encoding: "utf-8" | "g
     const bytes = new Uint8Array(hexBytes.map(h => parseInt(h, 16)));
     const decoder = new TextDecoder(encoding);
     return decoder.decode(bytes);
-  } catch (e) {
+  } catch {
     return asciiStr;
   }
 }

@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useTranslation } from "react-i18next";
-import type { SerialConfig, SerialStatus, TerminalData } from "../types/serial";
+import type { SerialConfig, SerialStatus, TerminalData, SerialPortInfoDetailed } from "../types/serial";
 
 export function useSerial(
   addLog: (direction: string, hex: string, ascii: string) => void,
@@ -16,7 +16,11 @@ export function useSerial(
   useEffect(() => { addLogRef.current = addLog; }, [addLog]);
   useEffect(() => { addTextLogRef.current = addTextLog; }, [addTextLog]);
 
-  const [ports, setPorts] = useState<string[]>([]);
+  const [ports, setPorts] = useState<SerialPortInfoDetailed[]>([]);
+  const portsRef = useRef(ports);
+  useEffect(() => {
+    portsRef.current = ports;
+  }, [ports]);
   const [serialConfig, setSerialConfigRaw] = useState<SerialConfig>(() => {
     const defaults: SerialConfig = {
       mode: "serial",
@@ -63,6 +67,10 @@ export function useSerial(
     baud_rate: 0,
     mode: "serial",
   });
+  const connectedRef = useRef(status.connected);
+  useEffect(() => {
+    connectedRef.current = status.connected;
+  }, [status.connected]);
   const [byteStats, setByteStats] = useState<[number, number]>([0, 0]);
   const [tcpClients, setTcpClients] = useState<string[]>([]);
   const [selectedTcpClient, setSelectedTcpClient] = useState<string>("all");
@@ -135,17 +143,37 @@ export function useSerial(
   }, [status.connected]);
 
   // 备注：刷新串口列表
-  const refreshPorts = useCallback(async () => {
+  const refreshPorts = useCallback(async (isSilent = false) => {
     try {
-      const portList = await invoke<string[]>("list_ports");
-      setPorts(portList);
-      if (portList.length > 0) {
-        setSerialConfig((prev) => prev.port_name ? prev : { ...prev, port_name: portList[0] });
+      const portList = await invoke<SerialPortInfoDetailed[]>("list_ports");
+      const portNames = portList.map((p) => p.port_name);
+      
+      const sortedPrev = [...portsRef.current].map((p) => p.port_name).sort();
+      const sortedNew = [...portNames].sort();
+      const isSame = sortedPrev.length === sortedNew.length && sortedPrev.every((val, index) => val === sortedNew[index]);
+      
+      if (!isSame) {
+        setPorts(portList);
+        
+        setSerialConfig((prevConfig) => {
+          if (connectedRef.current) {
+            return prevConfig;
+          }
+          if (prevConfig.port_name && portNames.includes(prevConfig.port_name)) {
+            return prevConfig;
+          }
+          if (portList.length > 0) {
+            return { ...prevConfig, port_name: portList[0].port_name };
+          }
+          return { ...prevConfig, port_name: "" };
+        });
       }
     } catch (e) {
-      addTextLog("ERROR", `${t("serial.refreshFail", { defaultValue: "刷新串口失败" })}: ${e}`);
+      if (!isSilent) {
+        addTextLog("ERROR", `${t("serial.refreshFail", { defaultValue: "刷新串口失败" })}: ${e}`);
+      }
     }
-  }, [addTextLog, t]);
+  }, [addTextLog, t, setSerialConfig]);
 
   // 备注：打开/关闭连接
   const togglePort = useCallback(async () => {
@@ -185,6 +213,46 @@ export function useSerial(
     const timer = window.setTimeout(() => { void refreshPortsRef.current(); }, 0);
     return () => window.clearTimeout(timer);
   }, []);
+
+  // 备注：监听串口设备变更事件，自动更新列表并实现自动选择
+  useEffect(() => {
+    const unlistenPromise = listen<SerialPortInfoDetailed[]>("ports-changed", (event) => {
+      const portList = event.payload;
+      const portNames = portList.map((p) => p.port_name);
+      
+      const sortedPrev = [...portsRef.current].map((p) => p.port_name).sort();
+      const sortedNew = [...portNames].sort();
+      const isSame = sortedPrev.length === sortedNew.length && sortedPrev.every((val, index) => val === sortedNew[index]);
+      
+      if (!isSame) {
+        setPorts(portList);
+        
+        // 检测新插入的串口以实现自动选择
+        const prevPortNames = portsRef.current.map((p) => p.port_name);
+        const addedPorts = portNames.filter(p => !prevPortNames.includes(p));
+        
+        setSerialConfig((prevConfig) => {
+          if (connectedRef.current) {
+            return prevConfig;
+          }
+          if (addedPorts.length > 0) {
+            return { ...prevConfig, port_name: addedPorts[0] };
+          }
+          if (prevConfig.port_name && portNames.includes(prevConfig.port_name)) {
+            return prevConfig;
+          }
+          if (portList.length > 0) {
+            return { ...prevConfig, port_name: portList[0].port_name };
+          }
+          return { ...prevConfig, port_name: "" };
+        });
+      }
+    });
+
+    return () => {
+      void unlistenPromise.then((fn) => fn());
+    };
+  }, [setSerialConfig]);
 
   return {
     ports,

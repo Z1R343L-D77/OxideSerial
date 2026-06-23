@@ -1,7 +1,7 @@
 import { useState, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
-import type { SerialConfig, SerialStatus } from "../types/serial";
+import type { SerialConfig, SerialStatus, SerialPortInfoDetailed } from "../types/serial";
 import type { ModbusRegister, ByteOrderOption } from "../types/modbus";
 
 const BAUD_RATES = [1200, 2400, 4800, 9600, 19200, 38400, 57600, 74800, 115200, 230400, 460800, 500000, 576000, 921600, 1000000, 1152000, 1500000, 2000000, 2500000, 3000000, 3500000, 4000000];
@@ -10,7 +10,7 @@ const STOP_BITS = [1, 2];
 const PARITIES = ["none", "odd", "even"];
 
 interface SidebarProps {
-  ports: string[];
+  ports: SerialPortInfoDetailed[];
   serialConfig: SerialConfig;
   status: SerialStatus;
   onSerialConfigChange: (config: SerialConfig) => void;
@@ -59,9 +59,13 @@ export function Sidebar({
   width = 240,
 }: SidebarProps) {
   const { t } = useTranslation();
+  
+  const selectedPort = ports.find((p) => p.port_name === serialConfig.port_name);
+  const selectedPortFriendlyName = selectedPort ? selectedPort.friendly_name : "";
 
   // 备注：协议帮助面板折叠状态
   const [showHelp, setShowHelp] = useState(false);
+  const [isPortSelectFocused, setIsPortSelectFocused] = useState(false);
 
   // Modbus Add Register Form States
   const [newRegName, setNewRegName] = useState("");
@@ -210,11 +214,20 @@ export function Sidebar({
               <div className="port-row">
                 <select
                   value={serialConfig.port_name}
-                  onChange={(e) => onSerialConfigChange({ ...serialConfig, port_name: e.target.value })}
-                  title={t("serial.portSelectTip", { defaultValue: "选择要连接的串口设备端口号" })}
+                  onChange={(e) => {
+                    onSerialConfigChange({ ...serialConfig, port_name: e.target.value });
+                    e.target.blur();
+                  }}
+                  onFocus={() => setIsPortSelectFocused(true)}
+                  onBlur={() => setIsPortSelectFocused(false)}
+                  title={selectedPortFriendlyName || t("serial.portSelectTip", { defaultValue: "选择要连接的串口设备端口号" })}
                 >
                   {ports.length === 0 && <option value="">{t("serial.noPorts", { defaultValue: "无可用串口" })}</option>}
-                  {ports.map((p) => (<option key={p} value={p}>{p}</option>))}
+                  {ports.map((p) => (
+                    <option key={p.port_name} value={p.port_name} title={p.friendly_name}>
+                      {isPortSelectFocused ? (p.friendly_name || p.port_name) : p.port_name}
+                    </option>
+                  ))}
                 </select>
                 <button
                   className="btn-refresh"
@@ -227,6 +240,22 @@ export function Sidebar({
                   </svg>
                 </button>
               </div>
+              {selectedPortFriendlyName && (
+                <div
+                  style={{
+                    color: "var(--text-muted)",
+                    fontSize: "11px",
+                    marginTop: "4px",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                    cursor: "help",
+                  }}
+                  title={selectedPortFriendlyName}
+                >
+                  {selectedPortFriendlyName}
+                </div>
+              )}
             </div>
             <div className="form-group">
               <label>{t("serial.baudRate", { defaultValue: "波特率" })}</label>

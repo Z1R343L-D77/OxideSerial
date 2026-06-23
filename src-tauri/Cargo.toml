@@ -1,6 +1,6 @@
 [package]
 name = "oxide-serial"
-version = "0.3.3"
+version = "0.3.4"
 description = "Industrial-grade serial port debugger"
 authors = ["Z1R343L-D77"]
 license = "MIT"
@@ -30,3 +30,4 @@ tauri-plugin-fs = "2"
 tauri-plugin-autostart = "2"
 tauri-plugin-window-state = "2"
 encoding_rs = "0.8.35"
+winreg = "0.52.0"

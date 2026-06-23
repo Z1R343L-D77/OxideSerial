@@ -36,7 +36,7 @@ Most serial debugging tools either have outdated UIs, rely on Java/Python runtim
 
 ### Data Connection
 
-- **Serial Mode**: Automatic COM port detection, baud rates 1,200 to 4,000,000, configurable data/stop/parity bits
+- **Serial Mode**: Automatic COM port detection (with device friendly names), baud rates 1,200 to 4,000,000, configurable data/stop/parity bits
 - **UDP Mode**: Remote IP/port configuration, local port binding
 - **TCP Client**: Target IP/port, custom handshake data packet
 - **TCP Server**: Multi-client support, client selection, client management

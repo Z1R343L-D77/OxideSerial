@@ -53,3 +53,8 @@ export interface LogEntry {
   ascii: string;
   gbk?: string;
 }
+
+export interface SerialPortInfoDetailed {
+  port_name: string;
+  friendly_name: string;
+}

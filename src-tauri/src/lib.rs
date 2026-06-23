@@ -153,11 +153,96 @@ macro_rules! lock_or_err {
     };
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SerialPortInfoDetailed {
+    pub port_name: String,
+    pub friendly_name: String,
+}
+
+#[cfg(target_os = "windows")]
+fn get_windows_port_friendly_names() -> std::collections::HashMap<String, String> {
+    use winreg::enums::*;
+    use winreg::RegKey;
+    let mut map = std::collections::HashMap::new();
+    let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
+    if let Ok(enum_key) = hklm.open_subkey("SYSTEM\\CurrentControlSet\\Enum") {
+        for bus_name in enum_key.enum_keys().filter_map(|r| r.ok()) {
+            if let Ok(bus_key) = enum_key.open_subkey(&bus_name) {
+                for dev_name in bus_key.enum_keys().filter_map(|r| r.ok()) {
+                    if let Ok(dev_key) = bus_key.open_subkey(&dev_name) {
+                        for inst_name in dev_key.enum_keys().filter_map(|r| r.ok()) {
+                            if let Ok(inst_key) = dev_key.open_subkey(&inst_name) {
+                                if let Ok(params_key) = inst_key.open_subkey("Device Parameters") {
+                                    let port_name: String = params_key.get_value("PortName").unwrap_or_default();
+                                    if !port_name.is_empty() {
+                                        let mut friendly_name: String = inst_key.get_value("FriendlyName").unwrap_or_default();
+                                        if friendly_name.is_empty() {
+                                            let desc: String = inst_key.get_value("DeviceDesc").unwrap_or_default();
+                                            if !desc.is_empty() {
+                                                friendly_name = desc.split(';').last().unwrap_or(&desc).to_string();
+                                            }
+                                        }
+                                        if friendly_name.is_empty() {
+                                            friendly_name = port_name.clone();
+                                        }
+                                        map.insert(port_name, friendly_name);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    map
+}
+
 #[tauri::command]
-fn list_ports() -> Result<Vec<String>, String> {
-    serialport::available_ports()
-        .map(|ports| ports.iter().map(|p| p.port_name.clone()).collect())
-        .map_err(|e| format!("获取串口列表失败: {e}"))
+fn list_ports() -> Result<Vec<SerialPortInfoDetailed>, String> {
+    let mut results = Vec::new();
+    let ports = serialport::available_ports().map_err(|e| format!("获取串口列表失败: {e}"))?;
+    
+    #[cfg(target_os = "windows")]
+    let friendly_map = get_windows_port_friendly_names();
+    
+    for p in ports {
+        let port_name = p.port_name;
+        let mut friendly_name = port_name.clone();
+        
+        #[cfg(target_os = "windows")]
+        {
+            if let Some(name) = friendly_map.get(&port_name) {
+                friendly_name = name.clone();
+            }
+        }
+        
+        #[cfg(not(target_os = "windows"))]
+        {
+            if let serialport::SerialPortType::UsbPort(info) = p.port_type {
+                if let Some(prod) = info.product {
+                    friendly_name = format!("{} ({})", prod, port_name);
+                }
+            }
+        }
+
+        // 过滤掉蓝牙虚拟串口（其友好名或串口名包含“蓝牙”或“bluetooth”）
+        let friendly_name_lower = friendly_name.to_lowercase();
+        let port_name_lower = port_name.to_lowercase();
+        if friendly_name_lower.contains("蓝牙")
+            || friendly_name_lower.contains("bluetooth")
+            || port_name_lower.contains("bluetooth")
+        {
+            continue;
+        }
+        
+        results.push(SerialPortInfoDetailed {
+            port_name,
+            friendly_name,
+        });
+    }
+    
+    Ok(results)
 }
 
 fn emit_clients_changed(app: &tauri::AppHandle, clients_arc: &Arc<Mutex<Vec<(String, std::net::TcpStream)>>>) {
@@ -1889,6 +1974,30 @@ pub fn run() {
             let show_item = MenuItem::with_id(app, "show", "显示窗口", true, None::<&str>)?;
             let quit_item = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&show_item, &quit_item])?;
+
+            // 备注：启动后台串口设备变更监控线程
+            let app_handle = app.handle().clone();
+            std::thread::spawn(move || {
+                let mut last_ports: Option<Vec<String>> = None;
+                loop {
+                    let current_ports = serialport::available_ports().unwrap_or_default();
+                    let mut current_names: Vec<String> = current_ports.into_iter().map(|p| p.port_name).collect();
+                    current_names.sort();
+
+                    let changed = match &last_ports {
+                        None => true,
+                        Some(last) => last != &current_names,
+                    };
+
+                    if changed {
+                        last_ports = Some(current_names.clone());
+                        if let Ok(detailed_ports) = list_ports() {
+                            let _ = app_handle.emit("ports-changed", &detailed_ports);
+                        }
+                    }
+                    std::thread::sleep(Duration::from_millis(1000));
+                }
+            });
 
             // 备注：创建托盘图标
             let _tray = TrayIconBuilder::new()
